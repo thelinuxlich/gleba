@@ -174,7 +174,7 @@ fn create_pessoa(req: Request, db: Connection) {
               wisp.created()
               |> set_header("Location", "/pessoas/" <> id)
             }
-            Error(_) -> wisp.internal_server_error()
+            Error(_) -> wisp.response(422)
           }
         }
         False -> wisp.response(422)
