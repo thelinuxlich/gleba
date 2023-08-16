@@ -9,10 +9,11 @@ import gleam/json
 import gleam/result.{try}
 import gleam/http/response.{set_header}
 import gleam/http/request.{get_query}
+import gleam/option.{Option}
 import helpers.{try_nil}
 
 pub type Pessoa {
-  Pessoa(apelido: String, nome: String, nascimento: String, stack: List(String))
+  Pessoa(apelido: String, nome: String, nascimento: String, stack: Option(List(String)))
 }
 
 pub fn handle_request(db: Connection) -> fn(Request) -> Response {
@@ -127,7 +128,7 @@ fn validate_pessoa(data: Pessoa) {
   apelido != "" && nome != "" && nascimento != "" && length(apelido) <= 32 && length(
     nome,
   ) <= 100 && length(nascimento) <= 10 && list.any(
-    stack,
+    option.unwrap(stack,[]),
     fn(x) { x == "" || string.length(x) > 32 },
   ) == False
 }
@@ -142,7 +143,7 @@ fn create_pessoa(req: Request, db: Connection) {
         dynamic.field("apelido", dynamic.string),
         dynamic.field("nome", dynamic.string),
         dynamic.field("nascimento", dynamic.string),
-        dynamic.field("stack", dynamic.list(dynamic.string)),
+        dynamic.field("stack", dynamic.optional(dynamic.list(dynamic.string))),
       ),
     )
   case json_decoded {
@@ -159,7 +160,7 @@ fn create_pessoa(req: Request, db: Connection) {
                 pgo.text(data.apelido),
                 pgo.text(data.nome),
                 pgo.text(data.nascimento),
-                pgo.text(json.to_string(json.array(data.stack, json.string))),
+                pgo.text(json.to_string(json.array(option.unwrap(data.stack, []), json.string))),
               ],
               dynamic.string,
             )
