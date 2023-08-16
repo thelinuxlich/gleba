@@ -6,8 +6,10 @@ import gleam/string.{length}
 import gleam/string_builder.{from_string}
 import gleam/list
 import gleam/json
+import gleam/result.{try}
 import gleam/http/response.{set_header}
 import gleam/http/request.{get_query}
+import helpers.{try_nil}
 
 pub type Pessoa {
   Pessoa(apelido: String, nome: String, nascimento: String, stack: List(String))
@@ -42,54 +44,47 @@ fn count_pessoas(db: Connection) {
 }
 
 fn list_pessoas(req: Request, db: Connection) {
-  let query_params = get_query(req)
-  case query_params {
-    Ok(params) -> {
-      case
-        params
-        |> list.find(fn(x) { x.0 == "t" })
-      {
-        Ok(#(_, search_term)) -> {
-          let return_type =
-            dynamic.tuple4(
-              dynamic.string,
-              dynamic.string,
-              dynamic.string,
-              dynamic.string,
-            )
-          let query =
-            "SELECT apelido,nome,nascimento,stack FROM pessoas 
-                        WHERE apelido LIKE '%' || $1 || '%' OR nome LIKE '%' || $1 || '%'
-                        OR nascimento LIKE '%' || $1 || '%'
-                        OR stack LIKE '%' || $1 || '%' 
-                    "
-          case pgo.execute(query, db, [pgo.text(search_term)], return_type) {
-            Ok(response) -> {
-              let json_string =
-                json.to_string_builder(json.array(
-                  response.rows,
-                  fn(x) {
-                    let assert Ok(stack) =
-                      json.decode(x.3, dynamic.list(dynamic.string))
-                    json.object([
-                      #("apelido", json.string(x.0)),
-                      #("nome", json.string(x.1)),
-                      #("nascimento", json.string(x.2)),
-                      #("stack", json.array(stack, json.string)),
-                    ])
-                  },
-                ))
-              wisp.ok()
-              |> set_header("Content-Type", "application/json")
-              |> wisp.set_body(Text(json_string))
-            }
-            Error(_) -> wisp.internal_server_error()
-          }
-        }
-        Error(Nil) -> wisp.bad_request()
-      }
-    }
-    Error(Nil) -> wisp.bad_request()
+  let result = {
+    use params <- try(get_query(req))
+    use #(_, search_term) <- try(list.find(params, fn(x) { x.0 == "t" }))
+    let return_type =
+      dynamic.tuple4(
+        dynamic.string,
+        dynamic.string,
+        dynamic.string,
+        dynamic.string,
+      )
+    let query =
+      "SELECT apelido,nome,nascimento,stack FROM pessoas 
+                WHERE apelido LIKE '%' || $1 || '%' OR nome LIKE '%' || $1 || '%'
+                OR nascimento LIKE '%' || $1 || '%'
+                OR stack LIKE '%' || $1 || '%' 
+            "
+    use response <- try_nil(pgo.execute(
+      query,
+      db,
+      [pgo.text(search_term)],
+      return_type,
+    ))
+    Ok(json.to_string_builder(json.array(
+      response.rows,
+      fn(x) {
+        let assert Ok(stack) = json.decode(x.3, dynamic.list(dynamic.string))
+        json.object([
+          #("apelido", json.string(x.0)),
+          #("nome", json.string(x.1)),
+          #("nascimento", json.string(x.2)),
+          #("stack", json.array(stack, json.string)),
+        ])
+      },
+    )))
+  }
+  case result {
+    Ok(content) ->
+      wisp.ok()
+      |> set_header("Content-Type", "application/json")
+      |> wisp.set_body(Text(content))
+    Error(_) -> wisp.bad_request()
   }
 }
 
