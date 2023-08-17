@@ -1,4 +1,4 @@
-import wisp.{Body, Request, Response, Text}
+import wisp.{Request, Response, Text}
 import gleam/http.{Get, Post}
 import gleam/pgo.{Connection}
 import gleam/dynamic
