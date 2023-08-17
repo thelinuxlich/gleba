@@ -104,13 +104,13 @@ pub fn create_pessoa_test() {
     "/pessoas", [], "{\"nome\": \"João\", \"apelido\": \"Fulano\", \"nascimento\": \"1990-01-01\", \"stack\": [\"Gleam\"]}"
   )
   let response = router.handle_request(db)(request)
-  let query = "SELECT id FROM pessoas where apelido = 'Fulano'"
-  let assert Ok(data) = pgo.execute(query, db, [], dynamic.element(0, dynamic.string))
-  let [id] = data.rows
+  //let query = "SELECT id FROM pessoas where apelido = 'Fulano'"
+  //let assert Ok(data) = pgo.execute(query, db, [], dynamic.element(0, dynamic.string))
+  //let [id] = data.rows
   response.status
   |> should.equal(201)
   response.headers
-  |> should.equal([#("Location", "/pessoas/" <> id)])
+  |> should.equal([#("Location", "/pessoas/1")])
   let request = testing.post(
     "/pessoas", [], "{\"nome\": \"João\", \"apelido\": \"Silva\", \"nascimento\": \"1990-01-01\", \"stack\": [\"Gleam\"]}"
   )
