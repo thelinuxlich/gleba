@@ -1,6 +1,6 @@
 import wisp.{Request, Response, Text}
 import gleam/http.{Get, Post}
-import gleam/pgo.{Connection}
+import gleam/pgo.{Connection, QueryError}
 import gleam/dynamic
 import gleam/string.{length}
 import gleam/string_builder.{from_string}
@@ -12,6 +12,7 @@ import gleam/http/request.{get_query}
 import gleam/option.{Option}
 import helpers.{try_nil}
 import gleam/bool.{guard}
+import gleam/int
 
 pub type Pessoa {
   Pessoa(
@@ -39,12 +40,12 @@ pub fn handle_request(db: Connection) -> fn(Request) -> Response {
 }
 
 fn count_pessoas(db: Connection) -> Response {
-  let query = "SELECT COUNT(*) FROM pessoas"
-  case pgo.execute(query, db, [], dynamic.string) {
+  let query = "SELECT COUNT(id) FROM pessoas"
+  case pgo.execute(query, db, [], dynamic.element(0, dynamic.int)) {
     Ok(response) -> {
       let [count] = response.rows
       wisp.ok()
-      |> wisp.set_body(Text(from_string(count)))
+      |> wisp.set_body(Text(from_string(int.to_string(count))))
     }
     Error(_) -> wisp.internal_server_error()
   }
@@ -96,7 +97,7 @@ fn list_pessoas(req: Request, db: Connection) -> Response {
 }
 
 fn get_pessoa(id: String, db: Connection) -> Response {
-  let query = "SELECT apelido,nome,nascimento,stack FROM pessoas WHERE id = $1"
+  let query = "SELECT apelido,nome,CAST(nascimento as text),stack FROM pessoas WHERE id = $1"
   let return_type =
     dynamic.tuple4(
       dynamic.string,
@@ -104,14 +105,14 @@ fn get_pessoa(id: String, db: Connection) -> Response {
       dynamic.string,
       dynamic.string,
     )
-  case pgo.execute(query, db, [pgo.text(id)], return_type) {
+  let response = pgo.execute(query, db, [pgo.text(id)], return_type)
+  case response {
     Ok(response) -> {
       case response.rows {
         [] -> wisp.not_found()
         _ -> {
           let [#(apelido, nome, nascimento, stack)] = response.rows
-          let assert Ok(stack) =
-            json.decode(stack, dynamic.list(dynamic.string))
+          let assert Ok(stack) = json.decode(stack, dynamic.list(dynamic.string))
           let json_string =
             json.to_string_builder(json.object([
               #("apelido", json.string(apelido)),

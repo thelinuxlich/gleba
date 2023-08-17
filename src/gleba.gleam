@@ -2,18 +2,10 @@ import gleam/erlang/process
 import mist
 import wisp
 import router
-import gleam/pgo
+import db
 
 pub fn main() {
-  let db =
-    pgo.connect(
-      pgo.Config(
-        ..pgo.default_config(),
-        host: "localhost",
-        database: "postgres",
-        pool_size: 15,
-      ),
-    )
+  let db = db.init(15)
   wisp.configure_logger()
   let secret_key_base = wisp.random_string(64)
 
