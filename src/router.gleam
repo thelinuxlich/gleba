@@ -26,18 +26,7 @@ pub type Pessoa {
 
 pub fn handle_request(db: Connection) -> fn(Request) -> Response {
   fn(req) {
-    let path_segments_without_qs =
-      list.map(
-        wisp.path_segments(req),
-        fn(x) {
-          let path_segment = list.at(string.split(x, "?"), 0)
-          case path_segment {
-            Ok(p) -> p
-            _ -> ""
-          }
-        },
-      )
-    case path_segments_without_qs {
+    case wisp.path_segments(req) {
       ["contagem-pessoas"] -> count_pessoas(db)
       ["pessoas"] ->
         case req.method {

@@ -6,6 +6,7 @@ pub fn init(pool_size: Int) {
     pgo.Config(
       ..pgo.default_config(),
       host: "db",
+      // change to localhost if running tests locally
       port: 5432,
       database: "postgres",
       user: "postgres",
