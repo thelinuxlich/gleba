@@ -14,7 +14,6 @@ import helpers.{try_nil}
 import gleam/bool.{guard}
 import gleam/int
 import gleam/regex
-import gleam/io
 
 pub type Pessoa {
   Pessoa(

@@ -5,7 +5,8 @@ pub fn init(pool_size: Int) {
   pgo.connect(
     pgo.Config(
       ..pgo.default_config(),
-      host: "localhost",
+      host: "db",
+      port: 5432,
       database: "postgres",
       user: "postgres",
       password: Some("test"),
