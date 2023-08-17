@@ -1,4 +1,4 @@
-import wisp.{Request, Response, Text, Body}
+import wisp.{Body, Request, Response, Text}
 import gleam/http.{Get, Post}
 import gleam/pgo.{Connection}
 import gleam/dynamic
@@ -150,7 +150,7 @@ fn create_pessoa(req: Request, db: Connection) -> Response {
         dynamic.field("nome", dynamic.string),
         dynamic.field("nascimento", dynamic.string),
         dynamic.field("stack", dynamic.optional(dynamic.list(dynamic.string))),
-      )
+      ),
     ))
     use <- guard(!validate_pessoa(data), Error(Nil))
     let query =
