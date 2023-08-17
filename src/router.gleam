@@ -11,6 +11,7 @@ import gleam/http/response.{set_header}
 import gleam/http/request.{get_query}
 import gleam/option.{Option}
 import helpers.{try_nil}
+import gleam/bool.{guard}
 
 pub type Pessoa {
   Pessoa(
@@ -140,8 +141,8 @@ fn validate_pessoa(data: Pessoa) {
 
 fn create_pessoa(req: Request, db: Connection) {
   use json_data <- wisp.require_bit_string_body(req)
-  let json_decoded =
-    json.decode_bits(
+  let result = {
+    use data <- try_nil(json.decode_bits(
       json_data,
       dynamic.decode4(
         Pessoa,
@@ -149,41 +150,32 @@ fn create_pessoa(req: Request, db: Connection) {
         dynamic.field("nome", dynamic.string),
         dynamic.field("nascimento", dynamic.string),
         dynamic.field("stack", dynamic.optional(dynamic.list(dynamic.string))),
-      ),
-    )
-  case json_decoded {
-    Ok(data) -> {
-      case validate_pessoa(data) {
-        True -> {
-          let query =
-            "INSERT INTO pessoas (apelido,nome,nascimento,stack) VALUES ($1,$2,$3,$4) RETURNING ID"
-          case
-            pgo.execute(
-              query,
-              db,
-              [
-                pgo.text(data.apelido),
-                pgo.text(data.nome),
-                pgo.text(data.nascimento),
-                pgo.text(json.to_string(json.array(
-                  option.unwrap(data.stack, []),
-                  json.string,
-                ))),
-              ],
-              dynamic.string,
-            )
-          {
-            Ok(response) -> {
-              let [id] = response.rows
-              wisp.created()
-              |> set_header("Location", "/pessoas/" <> id)
-            }
-            Error(_) -> wisp.response(422)
-          }
-        }
-        False -> wisp.response(422)
-      }
-    }
-    _ -> wisp.response(422)
+      )
+    ))
+    use <- guard(!validate_pessoa(data), Error(Nil))
+    let query =
+      "INSERT INTO pessoas (apelido,nome,nascimento,stack) VALUES ($1,$2,$3,$4) RETURNING ID"
+    use response <- try_nil(pgo.execute(
+      query,
+      db,
+      [
+        pgo.text(data.apelido),
+        pgo.text(data.nome),
+        pgo.text(data.nascimento),
+        pgo.text(json.to_string(json.array(
+          option.unwrap(data.stack, []),
+          json.string,
+        ))),
+      ],
+      dynamic.string,
+    ))
+    let [id] = response.rows
+    Ok(id)
+  }
+  case result {
+    Ok(id) ->
+      wisp.created()
+      |> set_header("Location", "/pessoas/" <> id)
+    Error(_) -> wisp.response(422)
   }
 }
