@@ -1,4 +1,4 @@
-import wisp.{Request, Response, Text}
+import wisp.{Request, Response, Text, Body}
 import gleam/http.{Get, Post}
 import gleam/pgo.{Connection}
 import gleam/dynamic
@@ -38,7 +38,7 @@ pub fn handle_request(db: Connection) -> fn(Request) -> Response {
   }
 }
 
-fn count_pessoas(db: Connection) {
+fn count_pessoas(db: Connection) -> Response {
   let query = "SELECT COUNT(*) FROM pessoas"
   case pgo.execute(query, db, [], dynamic.string) {
     Ok(response) -> {
@@ -50,7 +50,7 @@ fn count_pessoas(db: Connection) {
   }
 }
 
-fn list_pessoas(req: Request, db: Connection) {
+fn list_pessoas(req: Request, db: Connection) -> Response {
   let result = {
     use params <- try(get_query(req))
     use #(_, search_term) <- try(list.find(params, fn(x) { x.0 == "t" }))
@@ -95,7 +95,7 @@ fn list_pessoas(req: Request, db: Connection) {
   }
 }
 
-fn get_pessoa(id: String, db: Connection) {
+fn get_pessoa(id: String, db: Connection) -> Response {
   let query = "SELECT apelido,nome,nascimento,stack FROM pessoas WHERE id = $1"
   let return_type =
     dynamic.tuple4(
@@ -129,7 +129,7 @@ fn get_pessoa(id: String, db: Connection) {
   }
 }
 
-fn validate_pessoa(data: Pessoa) {
+fn validate_pessoa(data: Pessoa) -> Bool {
   let Pessoa(apelido, nome, nascimento, stack) = data
   apelido != "" && nome != "" && nascimento != "" && length(apelido) <= 32 && length(
     nome,
@@ -139,7 +139,7 @@ fn validate_pessoa(data: Pessoa) {
   ) == False
 }
 
-fn create_pessoa(req: Request, db: Connection) {
+fn create_pessoa(req: Request, db: Connection) -> Response {
   use json_data <- wisp.require_bit_string_body(req)
   let result = {
     use data <- try_nil(json.decode_bits(
