@@ -39,7 +39,8 @@ pub fn forbidden_method_test() {
 pub fn count_pessoas_test() {
   let db = db.init(1)
   let query = "SELECT COUNT(id) FROM pessoas"
-  let assert Ok(response) = pgo.execute(query, db, [], dynamic.element(0, dynamic.int))
+  let assert Ok(response) =
+    pgo.execute(query, db, [], dynamic.element(0, dynamic.int))
   let [count] = response.rows
   let request = testing.get("/contagem-pessoas", [])
   let response = router.handle_request(db)(request)
@@ -100,7 +101,7 @@ fn generate_request_with_qs(path: String, qs: String) {
 pub fn get_pessoas_test() {
   let db = db.init(1)
   let _ = add_sample_pessoa(db)
-  let request = generate_request_with_qs("/pessoas","t=Silva")
+  let request = generate_request_with_qs("/pessoas", "t=Silva")
   let response = router.handle_request(db)(request)
   response.status
   |> should.equal(200)
@@ -111,11 +112,11 @@ pub fn get_pessoas_test() {
   |> should.equal(
     "[{\"apelido\":\"Silva\",\"nome\":\"João\",\"nascimento\":\"1990-01-01\",\"stack\":[\"Gleam\"]}]",
   )
-  let request = generate_request_with_qs("/pessoas","")
+  let request = generate_request_with_qs("/pessoas", "")
   let response = router.handle_request(db)(request)
   response.status
   |> should.equal(400)
-  let request = generate_request_with_qs("/pessoas","t=")
+  let request = generate_request_with_qs("/pessoas", "t=")
   let response = router.handle_request(db)(request)
   response.status
   |> should.equal(400)
@@ -123,56 +124,83 @@ pub fn get_pessoas_test() {
 
 pub fn create_pessoa_test() {
   let db = db.init(1)
-  let request = testing.post(
-    "/pessoas", [], "{\"nome\": \"João\", \"apelido\": \"Fulano\", \"nascimento\": \"1990-01-01\", \"stack\": [\"Gleam\"]}"
-  )
+  let request =
+    testing.post(
+      "/pessoas",
+      [],
+      "{\"nome\": \"João\", \"apelido\": \"Fulano\", \"nascimento\": \"1990-01-01\", \"stack\": [\"Gleam\"]}",
+    )
   let response = router.handle_request(db)(request)
   response.status
   |> should.equal(201)
   let query = "SELECT id FROM pessoas where apelido = $1"
-  let assert Ok(data) = pgo.execute(query, db, [pgo.text("Fulano")], dynamic.element(0, dynamic.string))
+  let assert Ok(data) =
+    pgo.execute(
+      query,
+      db,
+      [pgo.text("Fulano")],
+      dynamic.element(0, dynamic.string),
+    )
   let assert Ok(id) = list.at(data.rows, 0)
   response.headers
   |> should.equal([#("Location", "/pessoas/" <> id)])
 
-  let request = testing.post(
-    "/pessoas", [], "{\"nome\": \"João\", \"apelido\": \"Das Neves\", \"nascimento\": \"1990-01-01\", \"stack\": null}"
-  )
+  let request =
+    testing.post(
+      "/pessoas",
+      [],
+      "{\"nome\": \"João\", \"apelido\": \"Das Neves\", \"nascimento\": \"1990-01-01\", \"stack\": null}",
+    )
   let response = router.handle_request(db)(request)
   response.status
   |> should.equal(201)
 
-  let request = testing.post(
-    "/pessoas", [], "{\"nome\": \"João\", \"apelido\": \"Das Couves\", \"nascimento\": \"1990-01-01\"}"
-  )
+  let request =
+    testing.post(
+      "/pessoas",
+      [],
+      "{\"nome\": \"João\", \"apelido\": \"Das Couves\", \"nascimento\": \"1990-01-01\"}",
+    )
   let response = router.handle_request(db)(request)
   response.status
   |> should.equal(201)
 
-  let request = testing.post(
-    "/pessoas", [], "{\"nome\": \"João\", \"apelido\": \"Fulano\", \"nascimento\": \"1990-01-01\", \"stack\": [\"Gleam\"]}"
-  )
+  let request =
+    testing.post(
+      "/pessoas",
+      [],
+      "{\"nome\": \"João\", \"apelido\": \"Fulano\", \"nascimento\": \"1990-01-01\", \"stack\": [\"Gleam\"]}",
+    )
   let response = router.handle_request(db)(request)
   response.status
   |> should.equal(422)
 
-  let request = testing.post(
-    "/pessoas", [], "{\"nome\": \"João\", \"apelido\": \"\", \"nascimento\": \"1990-01-01\", \"stack\": [\"Gleam\"]}"
-  )
+  let request =
+    testing.post(
+      "/pessoas",
+      [],
+      "{\"nome\": \"João\", \"apelido\": \"\", \"nascimento\": \"1990-01-01\", \"stack\": [\"Gleam\"]}",
+    )
   let response = router.handle_request(db)(request)
   response.status
   |> should.equal(422)
 
-  let request = testing.post(
-    "/pessoas", [], "{\"nome\": \"João\", \"apelido\": \"\", \"nascimento\": \"3000-01-01\", \"stack\": [\"Gleam\"]}"
-  )
+  let request =
+    testing.post(
+      "/pessoas",
+      [],
+      "{\"nome\": \"João\", \"apelido\": \"\", \"nascimento\": \"3000-01-01\", \"stack\": [\"Gleam\"]}",
+    )
   let response = router.handle_request(db)(request)
   response.status
   |> should.equal(422)
 
-  let request = testing.post(
-    "/pessoas", [], "{\"apelido\": \"Bla\", \"nascimento\": \"3000-01-01\", \"stack\": [\"Gleam\"]}"
-  )
+  let request =
+    testing.post(
+      "/pessoas",
+      [],
+      "{\"apelido\": \"Bla\", \"nascimento\": \"3000-01-01\", \"stack\": [\"Gleam\"]}",
+    )
   let response = router.handle_request(db)(request)
   response.status
   |> should.equal(422)

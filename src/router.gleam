@@ -27,13 +27,17 @@ pub type Pessoa {
 
 pub fn handle_request(db: Connection) -> fn(Request) -> Response {
   fn(req) {
-    let path_segments_without_qs = list.map(wisp.path_segments(req), fn(x) {
-      let path_segment = list.at(string.split(x,"?"), 0)
-      case path_segment {
-        Ok(p) -> p
-        _ -> ""
-      }
-    })
+    let path_segments_without_qs =
+      list.map(
+        wisp.path_segments(req),
+        fn(x) {
+          let path_segment = list.at(string.split(x, "?"), 0)
+          case path_segment {
+            Ok(p) -> p
+            _ -> ""
+          }
+        },
+      )
     case path_segments_without_qs {
       ["contagem-pessoas"] -> count_pessoas(db)
       ["pessoas"] ->
@@ -65,7 +69,10 @@ fn count_pessoas(db: Connection) -> Response {
 fn list_pessoas(req: Request, db: Connection) -> Response {
   let result = {
     use params <- try(get_query(req))
-    use #(_, search_term) <- try(list.find(params, fn(x) { x.0 == "t" && x.1 != "" }))
+    use #(_, search_term) <- try(list.find(
+      params,
+      fn(x) { x.0 == "t" && x.1 != "" },
+    ))
     let return_type =
       dynamic.tuple4(
         dynamic.string,
@@ -108,7 +115,8 @@ fn list_pessoas(req: Request, db: Connection) -> Response {
 }
 
 fn get_pessoa(id: String, db: Connection) -> Response {
-  let query = "SELECT apelido,nome,CAST(nascimento as text),stack FROM pessoas WHERE id = $1"
+  let query =
+    "SELECT apelido,nome,CAST(nascimento as text),stack FROM pessoas WHERE id = $1"
   let return_type =
     dynamic.tuple4(
       dynamic.string,
@@ -123,7 +131,8 @@ fn get_pessoa(id: String, db: Connection) -> Response {
         [] -> wisp.not_found()
         _ -> {
           let [#(apelido, nome, nascimento, stack)] = response.rows
-          let assert Ok(stack) = json.decode(stack, dynamic.list(dynamic.string))
+          let assert Ok(stack) =
+            json.decode(stack, dynamic.list(dynamic.string))
           let json_string =
             json.to_string_builder(json.object([
               #("apelido", json.string(apelido)),
@@ -142,7 +151,8 @@ fn get_pessoa(id: String, db: Connection) -> Response {
 }
 
 fn validate_pessoa(data: Pessoa) -> Bool {
-  let assert Ok(re) = regex.from_string("\\d{4}\\-(0[1-9]|1[012])\\-(0[1-9]|[12][0-9]|3[01])")
+  let assert Ok(re) =
+    regex.from_string("\\d{4}\\-(0[1-9]|1[012])\\-(0[1-9]|[12][0-9]|3[01])")
   let Pessoa(apelido, nome, nascimento, stack) = data
   apelido != "" && nome != "" && regex.check(re, nascimento) && length(apelido) <= 32 && length(
     nome,
