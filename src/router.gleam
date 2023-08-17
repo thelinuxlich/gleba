@@ -65,7 +65,7 @@ fn list_pessoas(req: Request, db: Connection) -> Response {
       "SELECT apelido,nome,nascimento,stack FROM pessoas 
                 WHERE apelido LIKE '%' || $1 || '%' OR nome LIKE '%' || $1 || '%'
                 OR nascimento LIKE '%' || $1 || '%'
-                OR stack LIKE '%' || $1 || '%' 
+                OR stack LIKE '%' || $1 || '%' LIMIT 50
             "
     use response <- try_nil(pgo.execute(
       query,
