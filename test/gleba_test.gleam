@@ -6,6 +6,11 @@ import db
 import gleam/pgo.{Connection}
 import gleam/dynamic
 import gleam/int
+import gleam/list
+import gleam/http
+import gleam/http/request
+import gleam/option.{None, Some}
+import wisp
 
 pub fn main() {
   gleeunit.main()
@@ -74,10 +79,28 @@ pub fn get_pessoa_test() {
   |> should.equal(404)
 }
 
+// this is a workaround because wisp/testing doesn't parse the querystring yet
+fn generate_request_with_qs(path: String, qs: String) {
+  request.Request(
+    method: http.Get,
+    headers: [],
+    body: <<>>,
+    scheme: http.Https,
+    host: "localhost",
+    port: None,
+    path: path,
+    query: Some(qs),
+  )
+  |> request.set_body(wisp.create_canned_connection(
+    <<>>,
+    "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  ))
+}
+
 pub fn get_pessoas_test() {
   let db = db.init(1)
   let _ = add_sample_pessoa(db)
-  let request = testing.get("/pessoas?t=Silva", [])
+  let request = generate_request_with_qs("/pessoas","t=Silva")
   let response = router.handle_request(db)(request)
   response.status
   |> should.equal(200)
@@ -86,13 +109,13 @@ pub fn get_pessoas_test() {
   response
   |> testing.string_body
   |> should.equal(
-    "[{\"id\":\"dc951540-3224-4f0c-904e-3b1d18ace874\",\"nome\":\"João\",\"apelido\":\"Silva\",\"nascimento\":\"1990-01-01\",\"stack\":[\"Gleam\"]}]",
+    "[{\"apelido\":\"Silva\",\"nome\":\"João\",\"nascimento\":\"1990-01-01\",\"stack\":[\"Gleam\"]}]",
   )
-  let request = testing.get("/pessoas", [])
+  let request = generate_request_with_qs("/pessoas","")
   let response = router.handle_request(db)(request)
   response.status
   |> should.equal(400)
-  let request = testing.get("/pessoas?t=", [])
+  let request = generate_request_with_qs("/pessoas","t=")
   let response = router.handle_request(db)(request)
   response.status
   |> should.equal(400)
@@ -104,15 +127,51 @@ pub fn create_pessoa_test() {
     "/pessoas", [], "{\"nome\": \"João\", \"apelido\": \"Fulano\", \"nascimento\": \"1990-01-01\", \"stack\": [\"Gleam\"]}"
   )
   let response = router.handle_request(db)(request)
-  //let query = "SELECT id FROM pessoas where apelido = 'Fulano'"
-  //let assert Ok(data) = pgo.execute(query, db, [], dynamic.element(0, dynamic.string))
-  //let [id] = data.rows
   response.status
   |> should.equal(201)
+  let query = "SELECT id FROM pessoas where apelido = $1"
+  let assert Ok(data) = pgo.execute(query, db, [pgo.text("Fulano")], dynamic.element(0, dynamic.string))
+  let assert Ok(id) = list.at(data.rows, 0)
   response.headers
-  |> should.equal([#("Location", "/pessoas/1")])
+  |> should.equal([#("Location", "/pessoas/" <> id)])
+
   let request = testing.post(
-    "/pessoas", [], "{\"nome\": \"João\", \"apelido\": \"Silva\", \"nascimento\": \"1990-01-01\", \"stack\": [\"Gleam\"]}"
+    "/pessoas", [], "{\"nome\": \"João\", \"apelido\": \"Das Neves\", \"nascimento\": \"1990-01-01\", \"stack\": null}"
+  )
+  let response = router.handle_request(db)(request)
+  response.status
+  |> should.equal(201)
+
+  let request = testing.post(
+    "/pessoas", [], "{\"nome\": \"João\", \"apelido\": \"Das Couves\", \"nascimento\": \"1990-01-01\"}"
+  )
+  let response = router.handle_request(db)(request)
+  response.status
+  |> should.equal(201)
+
+  let request = testing.post(
+    "/pessoas", [], "{\"nome\": \"João\", \"apelido\": \"Fulano\", \"nascimento\": \"1990-01-01\", \"stack\": [\"Gleam\"]}"
+  )
+  let response = router.handle_request(db)(request)
+  response.status
+  |> should.equal(422)
+
+  let request = testing.post(
+    "/pessoas", [], "{\"nome\": \"João\", \"apelido\": \"\", \"nascimento\": \"1990-01-01\", \"stack\": [\"Gleam\"]}"
+  )
+  let response = router.handle_request(db)(request)
+  response.status
+  |> should.equal(422)
+
+  let request = testing.post(
+    "/pessoas", [], "{\"nome\": \"João\", \"apelido\": \"\", \"nascimento\": \"3000-01-01\", \"stack\": [\"Gleam\"]}"
+  )
+  let response = router.handle_request(db)(request)
+  response.status
+  |> should.equal(422)
+
+  let request = testing.post(
+    "/pessoas", [], "{\"apelido\": \"Bla\", \"nascimento\": \"3000-01-01\", \"stack\": [\"Gleam\"]}"
   )
   let response = router.handle_request(db)(request)
   response.status

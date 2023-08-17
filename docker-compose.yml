@@ -44,7 +44,7 @@ services:
   db: # Banco de dados
    image: postgres
    environment:
-     POSTGRES_PASSWORD: postgres
+     POSTGRES_PASSWORD: test
      POSTGRES_USER: postgres
      POSTGRES_DB: postgres
    volumes:

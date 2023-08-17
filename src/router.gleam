@@ -1,6 +1,6 @@
 import wisp.{Request, Response, Text}
 import gleam/http.{Get, Post}
-import gleam/pgo.{Connection, QueryError}
+import gleam/pgo.{Connection}
 import gleam/dynamic
 import gleam/string.{length}
 import gleam/string_builder.{from_string}
@@ -13,6 +13,8 @@ import gleam/option.{Option}
 import helpers.{try_nil}
 import gleam/bool.{guard}
 import gleam/int
+import gleam/regex
+import gleam/io
 
 pub type Pessoa {
   Pessoa(
@@ -25,7 +27,14 @@ pub type Pessoa {
 
 pub fn handle_request(db: Connection) -> fn(Request) -> Response {
   fn(req) {
-    case wisp.path_segments(req) {
+    let path_segments_without_qs = list.map(wisp.path_segments(req), fn(x) {
+      let path_segment = list.at(string.split(x,"?"), 0)
+      case path_segment {
+        Ok(p) -> p
+        _ -> ""
+      }
+    })
+    case path_segments_without_qs {
       ["contagem-pessoas"] -> count_pessoas(db)
       ["pessoas"] ->
         case req.method {
@@ -33,7 +42,9 @@ pub fn handle_request(db: Connection) -> fn(Request) -> Response {
           Post -> create_pessoa(req, db)
           _ -> wisp.method_not_allowed([Get, Post])
         }
-      ["pessoas", id] -> get_pessoa(id, db)
+      ["pessoas", id] -> {
+        get_pessoa(id, db)
+      }
       _ -> wisp.not_found()
     }
   }
@@ -54,7 +65,7 @@ fn count_pessoas(db: Connection) -> Response {
 fn list_pessoas(req: Request, db: Connection) -> Response {
   let result = {
     use params <- try(get_query(req))
-    use #(_, search_term) <- try(list.find(params, fn(x) { x.0 == "t" }))
+    use #(_, search_term) <- try(list.find(params, fn(x) { x.0 == "t" && x.1 != "" }))
     let return_type =
       dynamic.tuple4(
         dynamic.string,
@@ -63,9 +74,9 @@ fn list_pessoas(req: Request, db: Connection) -> Response {
         dynamic.string,
       )
     let query =
-      "SELECT apelido,nome,nascimento,stack FROM pessoas 
+      "SELECT apelido,nome,cast(nascimento as text),stack FROM pessoas 
                 WHERE apelido LIKE '%' || $1 || '%' OR nome LIKE '%' || $1 || '%'
-                OR nascimento LIKE '%' || $1 || '%'
+                OR CAST(nascimento as text) LIKE '%' || $1 || '%'
                 OR stack LIKE '%' || $1 || '%' LIMIT 50
             "
     use response <- try_nil(pgo.execute(
@@ -131,8 +142,9 @@ fn get_pessoa(id: String, db: Connection) -> Response {
 }
 
 fn validate_pessoa(data: Pessoa) -> Bool {
+  let assert Ok(re) = regex.from_string("\\d{4}\\-(0[1-9]|1[012])\\-(0[1-9]|[12][0-9]|3[01])")
   let Pessoa(apelido, nome, nascimento, stack) = data
-  apelido != "" && nome != "" && nascimento != "" && length(apelido) <= 32 && length(
+  apelido != "" && nome != "" && regex.check(re, nascimento) && length(apelido) <= 32 && length(
     nome,
   ) <= 100 && length(nascimento) <= 10 && list.any(
     option.unwrap(stack, []),
@@ -150,12 +162,12 @@ fn create_pessoa(req: Request, db: Connection) -> Response {
         dynamic.field("apelido", dynamic.string),
         dynamic.field("nome", dynamic.string),
         dynamic.field("nascimento", dynamic.string),
-        dynamic.field("stack", dynamic.optional(dynamic.list(dynamic.string))),
+        dynamic.optional_field("stack", dynamic.list(dynamic.string)),
       ),
     ))
     use <- guard(!validate_pessoa(data), Error(Nil))
     let query =
-      "INSERT INTO pessoas (apelido,nome,nascimento,stack) VALUES ($1,$2,$3,$4) RETURNING ID"
+      "INSERT INTO pessoas (apelido,nome,nascimento,stack) VALUES ($1,$2,TO_DATE($3, 'YYYY-MM-DD'),$4) RETURNING ID"
     use response <- try_nil(pgo.execute(
       query,
       db,
@@ -168,9 +180,9 @@ fn create_pessoa(req: Request, db: Connection) -> Response {
           json.string,
         ))),
       ],
-      dynamic.string,
+      dynamic.element(0, dynamic.string),
     ))
-    let [id] = response.rows
+    use id <- try(list.at(response.rows, 0))
     Ok(id)
   }
   case result {
