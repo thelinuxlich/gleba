@@ -7,23 +7,19 @@ services:
       - db
     expose:
       - "80"
-    links:
-      - db
     deploy:
       resources:
         limits:
           cpus: '0.25'
           memory: '0.5GB'
 
-  api2: # API - Instância 01
+  api2: # API - Instância 02
     image: thelinuxlich/gleba:latest
     hostname: api2
     depends_on:
       - db
     expose:
       - "80"
-    links:
-      - db
     deploy:
       resources:
         limits:
@@ -46,7 +42,7 @@ services:
           memory: '0.5GB'
 
   db: # Banco de dados
-   image: postgres
+   image: postgres:15
    restart: always
    environment:
      POSTGRES_PASSWORD: test
@@ -54,8 +50,6 @@ services:
      POSTGRES_DB: postgres
    expose:
     - "5432"
-   ports:
-    - 9998:5432
    volumes:
     - ./bootstrap.sql:/docker-entrypoint-initdb.d/bootstrap.sql
    deploy:
