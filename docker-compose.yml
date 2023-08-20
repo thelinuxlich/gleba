@@ -55,6 +55,8 @@ services:
       POSTGRES_PASSWORD: test
       POSTGRES_USER: postgres
       POSTGRES_DB: postgres
+    ports:
+      - '9998:5432'
     volumes:
       - ./bootstrap.sql:/docker-entrypoint-initdb.d/bootstrap.sql
     deploy:
