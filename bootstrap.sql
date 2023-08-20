@@ -3,7 +3,8 @@ CREATE UNLOGGED TABLE "pessoas"(
     "apelido" varchar(32) NOT NULL UNIQUE,
     "nome" varchar(100) NOT NULL,
     "nascimento" date NOT NULL,
-    "stack" text DEFAULT '[]'
+    "stack" text DEFAULT '[]',
+    "search" text GENERATED ALWAYS AS (LOWER(nome) || LOWER(apelido) || LOWER(stack)) STORED
 );
 
 INSERT INTO pessoas(apelido, nome, nascimento, stack)
@@ -11,9 +12,5 @@ INSERT INTO pessoas(apelido, nome, nascimento, stack)
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA pg_catalog;
 
-CREATE INDEX idx_pessoas_apelido_trgm ON "pessoas" USING gin("apelido" gin_trgm_ops);
-
-CREATE INDEX idx_pessoas_nome_trgm ON "pessoas" USING gin("nome" gin_trgm_ops);
-
-CREATE INDEX idx_pessoas_nome_trgm ON "stack" USING gin("stack" gin_trgm_ops);
+CREATE INDEX CONCURRENTLY idx_pessoas_apelido_trg ON "pessoas" USING gin("search" gin_trgm_ops);
 

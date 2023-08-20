@@ -36,6 +36,18 @@ pub fn forbidden_method_test() {
   |> should.equal([#("allow", "GET, POST")])
 }
 
+fn find_id_by_apelido(db: Connection, apelido: String) -> Result(String, Nil) {
+  let query = "SELECT id FROM pessoas where apelido = $1"
+  let assert Ok(data) =
+    pgo.execute(
+      query,
+      db,
+      [pgo.text(apelido)],
+      dynamic.element(0, dynamic.string),
+    )
+  let assert Ok(_) = list.at(data.rows, 0)
+}
+
 pub fn count_pessoas_test() {
   let db = db.init(1)
   let query = "SELECT COUNT(id) FROM pessoas"
@@ -65,6 +77,7 @@ pub fn get_pessoa_test() {
   let _ = add_sample_pessoa(db)
   let request = testing.get("/pessoas/dc951540-3224-4f0c-904e-3b1d18ace874", [])
   let response = router.handle_request(db)(request)
+  let assert Ok(id) = find_id_by_apelido(db, "Silva")
   response.status
   |> should.equal(200)
   response.headers
@@ -72,7 +85,7 @@ pub fn get_pessoa_test() {
   response
   |> testing.string_body
   |> should.equal(
-    "{\"apelido\":\"Silva\",\"nome\":\"João\",\"nascimento\":\"1990-01-01\",\"stack\":[\"Gleam\"]}",
+    "{\"id\":\"" <> id <> "\",\"apelido\":\"Silva\",\"nome\":\"João\",\"nascimento\":\"1990-01-01\",\"stack\":[\"Gleam\"]}",
   )
   let request = testing.get("/pessoas/foo", [])
   let response = router.handle_request(db)(request)
@@ -103,6 +116,7 @@ pub fn get_pessoas_test() {
   let _ = add_sample_pessoa(db)
   let request = generate_request_with_qs("/pessoas", "t=Silva")
   let response = router.handle_request(db)(request)
+  let assert Ok(id) = find_id_by_apelido(db, "Silva")
   response.status
   |> should.equal(200)
   response.headers
@@ -110,7 +124,7 @@ pub fn get_pessoas_test() {
   response
   |> testing.string_body
   |> should.equal(
-    "[{\"apelido\":\"Silva\",\"nome\":\"João\",\"nascimento\":\"1990-01-01\",\"stack\":[\"Gleam\"]}]",
+    "[{\"id\":\"" <> id <> "\",\"apelido\":\"Silva\",\"nome\":\"João\",\"nascimento\":\"1990-01-01\",\"stack\":[\"Gleam\"]}]",
   )
   let request = generate_request_with_qs("/pessoas", "")
   let response = router.handle_request(db)(request)

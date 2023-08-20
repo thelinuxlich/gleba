@@ -62,17 +62,16 @@ fn list_pessoas(req: Request, db: Connection) -> Response {
       fn(x) { x.0 == "t" && x.1 != "" },
     ))
     let return_type =
-      dynamic.tuple4(
+      dynamic.tuple5(
+        dynamic.string,
         dynamic.string,
         dynamic.string,
         dynamic.string,
         dynamic.string,
       )
     let query =
-      "SELECT apelido,nome,cast(nascimento as text),stack FROM pessoas 
-                WHERE apelido ILIKE '%' || $1 || '%' OR nome ILIKE '%' || $1 || '%'
-                OR stack ILIKE '%' || $1 || '%' LIMIT 50
-            "
+      "SELECT id,apelido,nome,cast(nascimento as text),stack FROM pessoas 
+                WHERE search ILIKE '%' || $1 || '%' LIMIT 50"
     use response <- try_nil(pgo.execute(
       query,
       db,
@@ -82,11 +81,12 @@ fn list_pessoas(req: Request, db: Connection) -> Response {
     Ok(json.to_string_builder(json.array(
       response.rows,
       fn(x) {
-        let assert Ok(stack) = json.decode(x.3, dynamic.list(dynamic.string))
+        let assert Ok(stack) = json.decode(x.4, dynamic.list(dynamic.string))
         json.object([
-          #("apelido", json.string(x.0)),
-          #("nome", json.string(x.1)),
-          #("nascimento", json.string(x.2)),
+          #("id", json.string(x.0)),
+          #("apelido", json.string(x.1)),
+          #("nome", json.string(x.2)),
+          #("nascimento", json.string(x.3)),
           #("stack", json.array(stack, json.string)),
         ])
       },
@@ -103,9 +103,10 @@ fn list_pessoas(req: Request, db: Connection) -> Response {
 
 fn get_pessoa(id: String, db: Connection) -> Response {
   let query =
-    "SELECT apelido,nome,CAST(nascimento as text),stack FROM pessoas WHERE id = $1"
+    "SELECT id,apelido,nome,CAST(nascimento as text),stack FROM pessoas WHERE id = $1"
   let return_type =
-    dynamic.tuple4(
+    dynamic.tuple5(
+      dynamic.string,
       dynamic.string,
       dynamic.string,
       dynamic.string,
@@ -117,11 +118,12 @@ fn get_pessoa(id: String, db: Connection) -> Response {
       case response.rows {
         [] -> wisp.not_found()
         _ -> {
-          let [#(apelido, nome, nascimento, stack)] = response.rows
+          let [#(id, apelido, nome, nascimento, stack)] = response.rows
           let assert Ok(stack) =
             json.decode(stack, dynamic.list(dynamic.string))
           let json_string =
             json.to_string_builder(json.object([
+              #("id", json.string(id)),
               #("apelido", json.string(apelido)),
               #("nome", json.string(nome)),
               #("nascimento", json.string(nascimento)),
