@@ -71,11 +71,11 @@ fn list_pessoas(req: Request, db: Connection) -> Response {
       )
     let query =
       "SELECT id,apelido,nome,cast(nascimento as text),stack FROM pessoas 
-                WHERE search ILIKE '%' || $1 || '%' LIMIT 50"
+                WHERE search LIKE '%' || $1 || '%' LIMIT 50"
     use response <- try_nil(pgo.execute(
       query,
       db,
-      [pgo.text(search_term)],
+      [pgo.text(string.lowercase(search_term))],
       return_type,
     ))
     Ok(json.to_string_builder(json.array(
