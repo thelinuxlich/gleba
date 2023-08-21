@@ -35,7 +35,10 @@ pub fn handle_request(db: Connection) -> fn(Request) -> Response {
           _ -> wisp.method_not_allowed([Get, Post])
         }
       ["pessoas", id] -> {
-        get_pessoa(id, db)
+        case req.method {
+          Get -> get_pessoa(id, db)
+          _ -> wisp.method_not_allowed([Get])
+        }
       }
       _ -> wisp.not_found()
     }

@@ -12,5 +12,5 @@ INSERT INTO pessoas(apelido, nome, nascimento, stack)
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA pg_catalog;
 
-CREATE INDEX CONCURRENTLY idx_pessoas_apelido_trg ON "pessoas" USING gin("search" gin_trgm_ops);
+CREATE INDEX idx_pessoas_apelido_trg ON "pessoas" USING gin("search" gin_trgm_ops);
 
