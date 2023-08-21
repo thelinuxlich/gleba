@@ -125,7 +125,6 @@ fn get_pessoa(id: String, socket: Socket) -> Response {
   let resp = gluon.get(socket, id)
   case resp {
     Ok(data) -> {
-      use <- guard(data == "", wisp.not_found())
       let assert Ok(decoded_data) = json.decode(data, dyn_pessoa_decoder())
       let Pessoa(apelido, nome, nascimento, Some(stack)) = decoded_data
       let json_string =
@@ -161,8 +160,7 @@ fn create_pessoa(req: Request, db: Connection, socket: Socket) -> Response {
   let result = {
     use data <- try_nil(json.decode_bits(json_data, dyn_pessoa_decoder()))
     use <- guard(!validate_pessoa(data), Error(Nil))
-    use apelido_exists <- try_nil(gluon.get(socket, data.apelido))
-    use <- guard(apelido_exists == "1", Error(Nil))
+    use _ <- try_nil(gluon.get(socket, data.apelido))
     let query =
       "INSERT INTO pessoas (apelido,nome,nascimento,stack) VALUES ($1,$2,TO_DATE($3, 'YYYY-MM-DD'),$4) RETURNING ID"
     use response <- try_nil(pgo.execute(
@@ -187,12 +185,9 @@ fn create_pessoa(req: Request, db: Connection, socket: Socket) -> Response {
         #("nascimento", json.string(data.nascimento)),
         #("stack", json.array(option.unwrap(data.stack, []), json.string)),
       ]))
-    let command = "MSET '" <> id <> "' '" <> json_data_stringified <> "' '" <> data.apelido <> "' '1'"
-    let _ =
-      gluon.send_command(
-        socket,
-        command,
-      )
+    let command =
+      "MSET '" <> id <> "' '" <> json_data_stringified <> "' '" <> data.apelido <> "' '1'"
+    let _ = gluon.send_command(socket, command)
     Ok(id)
   }
   case result {
