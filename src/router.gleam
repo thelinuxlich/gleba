@@ -16,6 +16,7 @@ import gleam/int
 import gleam/regex
 import gluon.{Socket}
 import redis
+import gleam/io
 
 pub type Pessoa {
   Pessoa(
@@ -160,36 +161,43 @@ fn create_pessoa(req: Request, db: Connection, socket: Socket) -> Response {
   let result = {
     use data <- try_nil(json.decode_bits(json_data, dyn_pessoa_decoder()))
     use <- guard(!validate_pessoa(data), Error(Nil))
-    use _ <- try_nil(gluon.get(socket, data.apelido))
-    let query =
-      "INSERT INTO pessoas (apelido,nome,nascimento,stack) VALUES ($1,$2,TO_DATE($3, 'YYYY-MM-DD'),$4) RETURNING ID"
-    use response <- try_nil(pgo.execute(
-      query,
-      db,
-      [
-        pgo.text(data.apelido),
-        pgo.text(data.nome),
-        pgo.text(data.nascimento),
-        pgo.text(json.to_string(json.array(
-          option.unwrap(data.stack, []),
-          json.string,
-        ))),
-      ],
-      dynamic.element(0, dynamic.string),
-    ))
-    use id <- try(list.at(response.rows, 0))
-    let json_data_stringified =
-      json.to_string(json.object([
-        #("apelido", json.string(data.apelido)),
-        #("nome", json.string(data.nome)),
-        #("nascimento", json.string(data.nascimento)),
-        #("stack", json.array(option.unwrap(data.stack, []), json.string)),
-      ]))
-    let command =
-      "MSET '" <> id <> "' '" <> json_data_stringified <> "' '" <> data.apelido <> "' '1'"
-    let _ = gluon.send_command(socket, command)
-    Ok(id)
+    let resp = gluon.get(socket, data.apelido)
+    case resp {
+      Error(_) -> {
+        // record doesn't exist, so create
+        let query =
+          "INSERT INTO pessoas (apelido,nome,nascimento,stack) VALUES ($1,$2,TO_DATE($3, 'YYYY-MM-DD'),$4) RETURNING ID"
+        use response <- try_nil(pgo.execute(
+          query,
+          db,
+          [
+            pgo.text(data.apelido),
+            pgo.text(data.nome),
+            pgo.text(data.nascimento),
+            pgo.text(json.to_string(json.array(
+              option.unwrap(data.stack, []),
+              json.string,
+            ))),
+          ],
+          dynamic.element(0, dynamic.string),
+        ))
+        use id <- try(list.at(response.rows, 0))
+        let json_data_stringified =
+          json.to_string(json.object([
+            #("apelido", json.string(data.apelido)),
+            #("nome", json.string(data.nome)),
+            #("nascimento", json.string(data.nascimento)),
+            #("stack", json.array(option.unwrap(data.stack, []), json.string)),
+          ]))
+        let command =
+          "MSET '" <> id <> "' '" <> json_data_stringified <> "' '" <> data.apelido <> "' '1'"
+        let _ = gluon.send_command(socket, command)
+        Ok(id)
+      }
+      Ok(_) -> Error(Nil)
+    }
   }
+  // record exists, so return error
   case result {
     Ok(id) ->
       wisp.created()
