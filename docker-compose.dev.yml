@@ -1,0 +1,23 @@
+version: '3.5'
+services:
+  redis:
+    image: redis:latest
+    ports: 
+      - "6379:6379"
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 0.5GB
+  db:
+    image: postgres:15
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: test
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - ./bootstrap.sql:/docker-entrypoint-initdb.d/bootstrap.sql

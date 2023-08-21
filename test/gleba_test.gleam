@@ -11,8 +11,15 @@ import gleam/http
 import gleam/http/request
 import gleam/option.{None, Some}
 import wisp
+import redis
+import gluon
 
 pub fn main() {
+  let db = db.init(1)
+  let _ = pgo.execute("DELETE FROM pessoas", db, [], dynamic.dynamic)
+  let socket = redis.init()
+  let _ = gluon.send_command(socket,"FLUSHALL")
+  let _ = gluon.close(socket)
   gleeunit.main()
 }
 
@@ -20,7 +27,6 @@ pub fn not_found_test() {
   let db = db.init(1)
   let request = testing.get("/not-found", [])
   let response = router.handle_request(db)(request)
-
   response.status
   |> should.equal(404)
 }
@@ -72,70 +78,6 @@ fn add_sample_pessoa(db: Connection) {
   let assert Ok(_) = pgo.execute(query, db, [], dynamic.dynamic)
 }
 
-pub fn get_pessoa_test() {
-  let db = db.init(1)
-  let _ = add_sample_pessoa(db)
-  let request = testing.get("/pessoas/dc951540-3224-4f0c-904e-3b1d18ace874", [])
-  let response = router.handle_request(db)(request)
-  let assert Ok(id) = find_id_by_apelido(db, "Silva")
-  response.status
-  |> should.equal(200)
-  response.headers
-  |> should.equal([#("Content-Type", "application/json")])
-  response
-  |> testing.string_body
-  |> should.equal(
-    "{\"id\":\"" <> id <> "\",\"apelido\":\"Silva\",\"nome\":\"João\",\"nascimento\":\"1990-01-01\",\"stack\":[\"Gleam\"]}",
-  )
-  let request = testing.get("/pessoas/foo", [])
-  let response = router.handle_request(db)(request)
-  response.status
-  |> should.equal(404)
-}
-
-// this is a workaround because wisp/testing doesn't parse the querystring yet
-fn generate_request_with_qs(path: String, qs: String) {
-  request.Request(
-    method: http.Get,
-    headers: [],
-    body: <<>>,
-    scheme: http.Https,
-    host: "localhost",
-    port: None,
-    path: path,
-    query: Some(qs),
-  )
-  |> request.set_body(wisp.create_canned_connection(
-    <<>>,
-    "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-  ))
-}
-
-pub fn get_pessoas_test() {
-  let db = db.init(1)
-  let _ = add_sample_pessoa(db)
-  let request = generate_request_with_qs("/pessoas", "t=Silva")
-  let response = router.handle_request(db)(request)
-  let assert Ok(id) = find_id_by_apelido(db, "Silva")
-  response.status
-  |> should.equal(200)
-  response.headers
-  |> should.equal([#("Content-Type", "application/json")])
-  response
-  |> testing.string_body
-  |> should.equal(
-    "[{\"id\":\"" <> id <> "\",\"apelido\":\"Silva\",\"nome\":\"João\",\"nascimento\":\"1990-01-01\",\"stack\":[\"Gleam\"]}]",
-  )
-  let request = generate_request_with_qs("/pessoas", "")
-  let response = router.handle_request(db)(request)
-  response.status
-  |> should.equal(400)
-  let request = generate_request_with_qs("/pessoas", "t=")
-  let response = router.handle_request(db)(request)
-  response.status
-  |> should.equal(400)
-}
-
 pub fn create_pessoa_test() {
   let db = db.init(1)
   let request =
@@ -147,15 +89,7 @@ pub fn create_pessoa_test() {
   let response = router.handle_request(db)(request)
   response.status
   |> should.equal(201)
-  let query = "SELECT id FROM pessoas where apelido = $1"
-  let assert Ok(data) =
-    pgo.execute(
-      query,
-      db,
-      [pgo.text("Fulano")],
-      dynamic.element(0, dynamic.string),
-    )
-  let assert Ok(id) = list.at(data.rows, 0)
+  let assert Ok(id) = find_id_by_apelido(db, "Fulano")
   response.headers
   |> should.equal([#("Location", "/pessoas/" <> id)])
 
@@ -218,4 +152,67 @@ pub fn create_pessoa_test() {
   let response = router.handle_request(db)(request)
   response.status
   |> should.equal(422)
+}
+
+pub fn get_pessoa_test() {
+  let db = db.init(1)
+  let assert Ok(id) = find_id_by_apelido(db, "Fulano")
+  let request = testing.get("/pessoas/" <> id, [])
+  let response = router.handle_request(db)(request)
+  response.status
+  |> should.equal(200)
+  response.headers
+  |> should.equal([#("Content-Type", "application/json")])
+  response
+  |> testing.string_body
+  |> should.equal(
+    "{\"id\":\"" <> id <> "\",\"apelido\":\"Fulano\",\"nome\":\"João\",\"nascimento\":\"1990-01-01\",\"stack\":[\"Gleam\"]}",
+  )
+  let request = testing.get("/pessoas/foo", [])
+  let response = router.handle_request(db)(request)
+  response.status
+  |> should.equal(404)
+}
+
+// this is a workaround because wisp/testing doesn't parse the querystring yet
+fn generate_request_with_qs(path: String, qs: String) {
+  request.Request(
+    method: http.Get,
+    headers: [],
+    body: <<>>,
+    scheme: http.Https,
+    host: "localhost",
+    port: None,
+    path: path,
+    query: Some(qs),
+  )
+  |> request.set_body(wisp.create_canned_connection(
+    <<>>,
+    "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  ))
+}
+
+pub fn get_pessoas_test() {
+  let db = db.init(1)
+  let _ = add_sample_pessoa(db)
+  let request = generate_request_with_qs("/pessoas", "t=Silva")
+  let response = router.handle_request(db)(request)
+  let assert Ok(id) = find_id_by_apelido(db, "Silva")
+  response.status
+  |> should.equal(200)
+  response.headers
+  |> should.equal([#("Content-Type", "application/json")])
+  response
+  |> testing.string_body
+  |> should.equal(
+    "[{\"id\":\"" <> id <> "\",\"apelido\":\"Silva\",\"nome\":\"João\",\"nascimento\":\"1990-01-01\",\"stack\":[\"Gleam\"]}]",
+  )
+  let request = generate_request_with_qs("/pessoas", "")
+  let response = router.handle_request(db)(request)
+  response.status
+  |> should.equal(400)
+  let request = generate_request_with_qs("/pessoas", "t=")
+  let response = router.handle_request(db)(request)
+  response.status
+  |> should.equal(400)
 }

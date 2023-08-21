@@ -12,11 +12,13 @@ services:
       POSTGRES_DB: postgres
       POSTGRES_PORT: 5432
       POSTGRES_HOST: db
+      REDIS_POST: 6379
+      REDIS_HOST: redis
     deploy:
       resources:
         limits:
           cpus: '0.20'
-          memory: 0.5GB
+          memory: 0.4GB
   api2:
     image: thelinuxlich/gleba:latest
     hostname: api2
@@ -29,11 +31,13 @@ services:
       POSTGRES_DB: postgres
       POSTGRES_PORT: 5432
       POSTGRES_HOST: db
+      REDIS_POST: 6379
+      REDIS_HOST: redis
     deploy:
       resources:
         limits:
           cpus: '0.20'
-          memory: 0.5GB
+          memory: 0.4GB
   nginx:
     image: nginx:latest
     volumes:
@@ -43,12 +47,18 @@ services:
       - api2
     ports:
       - '9999:9999'
-    tmpfs:
-      - /tmp/cache:rw,nodev,nosuid,size=400M
     deploy:
       resources:
         limits:
-          cpus: '0.05'
+          cpus: '0.1'
+          memory: 0.2GB
+  redis:
+    image: redis:latest
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
           memory: 0.5GB
   db:
     image: postgres:15
@@ -63,5 +73,5 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.05'
+          cpus: '1'
           memory: 1.5GB
