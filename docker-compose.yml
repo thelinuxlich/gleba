@@ -6,7 +6,7 @@ services:
     depends_on:
       - db
     environment:
-      POSTGRES_POOL: 10
+      POSTGRES_POOL: 15
       POSTGRES_PASSWORD: test
       POSTGRES_USER: postgres
       POSTGRES_DB: postgres
@@ -17,7 +17,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.4'
+          cpus: '0.3'
           memory: 0.4GB
   api2:
     image: thelinuxlich/gleba:latest
@@ -25,7 +25,7 @@ services:
     depends_on:
       - db
     environment:
-      POSTGRES_POOL: 10
+      POSTGRES_POOL: 15
       POSTGRES_PASSWORD: test
       POSTGRES_USER: postgres
       POSTGRES_DB: postgres
@@ -36,7 +36,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.4'
+          cpus: '0.3'
           memory: 0.4GB
   nginx:
     image: nginx:latest
