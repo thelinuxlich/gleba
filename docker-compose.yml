@@ -2,18 +2,18 @@ version: '3.5'
 services:
   api1:
     image: thelinuxlich/gleba:latest
+    restart: always
     hostname: api1
     depends_on:
       - db
     environment:
-      POSTGRES_POOL: 280
+      POSTGRES_POOL: 250
       POSTGRES_PASSWORD: test
       POSTGRES_USER: postgres
       POSTGRES_DB: postgres
       POSTGRES_PORT: 5432
       POSTGRES_HOST: db
-      REDIS_POST: 6379
-      REDIS_HOST: redis
+      ERL_AFLAGS: -sname api1 -setcookie mycookie
     deploy:
       resources:
         limits:
@@ -21,18 +21,18 @@ services:
           memory: 0.5GB
   api2:
     image: thelinuxlich/gleba:latest
+    restart: always
     hostname: api2
     depends_on:
       - db
     environment:
-      POSTGRES_POOL: 280
+      POSTGRES_POOL: 250
       POSTGRES_PASSWORD: test
       POSTGRES_USER: postgres
       POSTGRES_DB: postgres
       POSTGRES_PORT: 5432
       POSTGRES_HOST: db
-      REDIS_POST: 6379
-      REDIS_HOST: redis
+      ERL_AFLAGS: -sname api2 -setcookie mycookie
     deploy:
       resources:
         limits:
@@ -52,17 +52,6 @@ services:
         limits:
           cpus: '0.2'
           memory: 0.2GB
-  redis:
-    image: redis:latest
-    restart: always
-    command: redis-server /usr/local/etc/redis/redis.conf
-    volumes:
-    - ./redis.conf:/usr/local/etc/redis/redis.conf
-    deploy:
-      resources:
-        limits:
-          cpus: '0.1'
-          memory: 0.1GB
   db:
     image: postgres:15
     command: postgres -c config_file=/etc/postgresql/postgresql.conf
@@ -79,5 +68,5 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.4'
+          cpus: '0.5'
           memory: 1.7GB

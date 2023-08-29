@@ -13,13 +13,27 @@ import gleam/option.{Option, Some}
 import gleba_utils.{try_nil}
 import gleam/bool.{guard}
 import gleam/int
-import gluon.{Socket}
-import redis
 import ids/uuid.{generate_v4}
 import gleam/io
+import gleam/erlang/atom.{Atom}
 
 @external(erlang, "calendar", "valid_date")
 fn valid_date(year: Int, month: Int, day: Int) -> Bool
+
+@external(erlang, "erlang", "node")
+fn node() -> Atom
+
+@external(erlang, "net_kernel", "connect_node")
+fn connect(node: Atom) -> Bool
+
+@external(erlang, "ram", "start_cluster")
+fn start_cluster(nodes: List(Atom)) -> String
+
+@external(erlang, "ram", "get")
+fn ram_get(id: String, default: String) -> String
+
+@external(erlang, "ram", "put")
+fn ram_put(id: String, data: String) -> String
 
 pub type Pessoa {
   Pessoa(
@@ -31,28 +45,36 @@ pub type Pessoa {
 }
 
 pub fn handle_request(db: Connection) -> fn(Request) -> Response {
-  fn(req) {
-    let socket = redis.init()
-    let result = {
-      case wisp.path_segments(req) {
-        ["contagem-pessoas"] -> count_pessoas(db)
-        ["pessoas"] ->
-          case req.method {
-            Get -> list_pessoas(req, db)
-            Post -> create_pessoa(req, db, socket)
-            _ -> wisp.method_not_allowed([Get, Post])
-          }
-        ["pessoas", id] -> {
-          case req.method {
-            Get -> get_pessoa(id, socket)
-            _ -> wisp.method_not_allowed([Get])
-          }
-        }
-        _ -> wisp.not_found()
-      }
+  let api1 = atom.create_from_string("api1@api1")
+  let api2 = atom.create_from_string("api2@api2")
+  io.debug(connect(api1))
+  io.debug(connect(api2))
+  let node_name = atom.to_string(node())
+  case node_name {
+    "api1@api1" -> {
+      io.debug("initializing cluster...")
+      io.debug(connect(api2))
+      start_cluster([api1, api2])
     }
-    let _ = gluon.close(socket)
-    result
+    node -> io.debug("already initialized..." <> node)
+  }
+  fn(req) {
+    case wisp.path_segments(req) {
+      ["contagem-pessoas"] -> count_pessoas(db)
+      ["pessoas"] ->
+        case req.method {
+          Get -> list_pessoas(req, db)
+          Post -> create_pessoa(req, db)
+          _ -> wisp.method_not_allowed([Get, Post])
+        }
+      ["pessoas", id] -> {
+        case req.method {
+          Get -> get_pessoa(id)
+          _ -> wisp.method_not_allowed([Get])
+        }
+      }
+      _ -> wisp.not_found()
+    }
   }
 }
 
@@ -125,10 +147,11 @@ fn dyn_pessoa_decoder() -> fn(Dynamic) -> Result(Pessoa, List(DecodeError)) {
   )
 }
 
-fn get_pessoa(id: String, socket: Socket) -> Response {
-  let resp = gluon.get(socket, id)
+fn get_pessoa(id: String) -> Response {
+  let resp = ram_get(id, "")
   case resp {
-    Ok(data) -> {
+    "" -> wisp.not_found()
+    data -> {
       let assert Ok(decoded_data) = json.decode(data, dyn_pessoa_decoder())
       let Pessoa(apelido, nome, nascimento, Some(stack)) = decoded_data
       let json_string =
@@ -143,7 +166,6 @@ fn get_pessoa(id: String, socket: Socket) -> Response {
       |> set_header("Content-Type", "application/json")
       |> wisp.set_body(Text(json_string))
     }
-    Error(_) -> wisp.not_found()
   }
 }
 
@@ -168,19 +190,16 @@ fn validate_pessoa(data: Pessoa) -> Bool {
   }
 }
 
-fn create_pessoa(
-  req: Request,
-  db: Connection,
-  socket: Socket,
-) -> Response {
+fn create_pessoa(req: Request, db: Connection) -> Response {
   use json_data <- wisp.require_bit_string_body(req)
   let result = {
     use data <- try_nil(json.decode_bits(json_data, dyn_pessoa_decoder()))
     use <- guard(!validate_pessoa(data), Error(Nil))
-    let resp = gluon.send_command(socket, "GETSET \"" <> data.apelido <> "\" 1")
+    let resp = ram_get(data.apelido, "")
     case resp {
-      Error(_) -> {
+      "" -> {
         // record doesn't exist, so create
+        let _ = ram_put(data.apelido, "1")
         let assert Ok(id) = generate_v4()
         let json_data_stringified =
           json.to_string(json.object([
@@ -189,7 +208,7 @@ fn create_pessoa(
             #("nascimento", json.string(data.nascimento)),
             #("stack", json.array(option.unwrap(data.stack, []), json.string)),
           ]))
-        let _ = gluon.set(socket, id, json_data_stringified)
+        let _ = ram_put(id, json_data_stringified)
         let query =
           "INSERT INTO pessoas (id, apelido,nome,nascimento,stack) VALUES ($1,$2,$3,TO_DATE($4, 'YYYY-MM-DD'),$5)"
         let _ =
@@ -210,7 +229,7 @@ fn create_pessoa(
           )
         Ok(id)
       }
-      Ok(_) -> Error(Nil)
+      _ -> Error(Nil)
     }
   }
   // record exists, so return error

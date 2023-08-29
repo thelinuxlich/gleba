@@ -21,6 +21,7 @@ gluon = "~> 0.1"
 ids = "~> 0.8"
 gleam_otp = "~> 0.6"
 birl = "~> 0.14"
+ram = "~> 0.5"
 
 [dev-dependencies]
 gleeunit = "~> 0.10"
