@@ -7,10 +7,7 @@ CREATE UNLOGGED TABLE "pessoas"(
     "search" text GENERATED ALWAYS AS (LOWER(nome) || LOWER(apelido) || LOWER(stack)) STORED
 );
 
-INSERT INTO pessoas(apelido, nome, nascimento, stack)
-    VALUES ('jose', 'Jose da Silva', '1990-01-01', '["java", "python"]');
-
 CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA pg_catalog;
 
-CREATE INDEX idx_pessoas_apelido_trg ON "pessoas" USING gin("search" gin_trgm_ops);
+CREATE INDEX idx_pessoas_apelido_trg ON "pessoas" USING gist("search" gist_trgm_ops);
 

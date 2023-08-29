@@ -13,10 +13,13 @@ import gleam/option.{Option, Some}
 import gleba_utils.{try_nil}
 import gleam/bool.{guard}
 import gleam/int
-import gleam/regex
 import gluon.{Socket}
 import redis
+import ids/uuid.{generate_v4}
 import gleam/io
+
+@external(erlang, "calendar", "valid_date")
+fn valid_date(year: Int, month: Int, day: Int) -> Bool
 
 pub type Pessoa {
   Pessoa(
@@ -145,43 +148,40 @@ fn get_pessoa(id: String, socket: Socket) -> Response {
 }
 
 fn validate_pessoa(data: Pessoa) -> Bool {
-  let assert Ok(re) =
-    regex.from_string("\\d{4}\\-(0[1-9]|1[012])\\-(0[1-9]|[12][0-9]|3[01])")
   let Pessoa(apelido, nome, nascimento, stack) = data
-  apelido != "" && nome != "" && regex.check(re, nascimento) && length(apelido) <= 32 && length(
-    nome,
-  ) <= 100 && length(nascimento) <= 10 && list.any(
-    option.unwrap(stack, []),
-    fn(x) { x == "" || string.length(x) > 32 },
-  ) == False
+  let iso_date = string.split(nascimento, "-")
+  case iso_date {
+    [year, month, day] -> {
+      let year = int.parse(year)
+      let month = int.parse(month)
+      let day = int.parse(day)
+      result.is_ok(year) && result.is_ok(month) && result.is_ok(day) && apelido != "" && nome != "" && valid_date(
+        result.unwrap(year, 2023),
+        result.unwrap(month, 1),
+        result.unwrap(day, 1),
+      ) && length(apelido) <= 32 && length(nome) <= 100 && list.any(
+        option.unwrap(stack, []),
+        fn(x) { x == "" || string.length(x) > 32 },
+      ) == False
+    }
+    _ -> False
+  }
 }
 
-fn create_pessoa(req: Request, db: Connection, socket: Socket) -> Response {
+fn create_pessoa(
+  req: Request,
+  db: Connection,
+  socket: Socket,
+) -> Response {
   use json_data <- wisp.require_bit_string_body(req)
   let result = {
     use data <- try_nil(json.decode_bits(json_data, dyn_pessoa_decoder()))
     use <- guard(!validate_pessoa(data), Error(Nil))
-    let resp = gluon.get(socket, data.apelido)
+    let resp = gluon.send_command(socket, "GETSET \"" <> data.apelido <> "\" 1")
     case resp {
       Error(_) -> {
         // record doesn't exist, so create
-        let query =
-          "INSERT INTO pessoas (apelido,nome,nascimento,stack) VALUES ($1,$2,TO_DATE($3, 'YYYY-MM-DD'),$4) RETURNING ID"
-        use response <- try_nil(pgo.execute(
-          query,
-          db,
-          [
-            pgo.text(data.apelido),
-            pgo.text(data.nome),
-            pgo.text(data.nascimento),
-            pgo.text(json.to_string(json.array(
-              option.unwrap(data.stack, []),
-              json.string,
-            ))),
-          ],
-          dynamic.element(0, dynamic.string),
-        ))
-        use id <- try(list.at(response.rows, 0))
+        let assert Ok(id) = generate_v4()
         let json_data_stringified =
           json.to_string(json.object([
             #("apelido", json.string(data.apelido)),
@@ -189,9 +189,25 @@ fn create_pessoa(req: Request, db: Connection, socket: Socket) -> Response {
             #("nascimento", json.string(data.nascimento)),
             #("stack", json.array(option.unwrap(data.stack, []), json.string)),
           ]))
-        let command =
-          "MSET '" <> id <> "' '" <> json_data_stringified <> "' '" <> data.apelido <> "' '1'"
-        let _ = gluon.send_command(socket, command)
+        let _ = gluon.set(socket, id, json_data_stringified)
+        let query =
+          "INSERT INTO pessoas (id, apelido,nome,nascimento,stack) VALUES ($1,$2,$3,TO_DATE($4, 'YYYY-MM-DD'),$5)"
+        let _ =
+          pgo.execute(
+            query,
+            db,
+            [
+              pgo.text(id),
+              pgo.text(data.apelido),
+              pgo.text(data.nome),
+              pgo.text(data.nascimento),
+              pgo.text(json.to_string(json.array(
+                option.unwrap(data.stack, []),
+                json.string,
+              ))),
+            ],
+            dynamic.dynamic,
+          )
         Ok(id)
       }
       Ok(_) -> Error(Nil)
