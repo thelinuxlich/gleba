@@ -14,7 +14,6 @@ import gleba_utils.{try_nil}
 import gleam/bool.{guard}
 import gleam/int
 import ids/uuid.{generate_v4}
-import gleam/io
 import gleam/erlang/atom.{Atom}
 
 @external(erlang, "calendar", "valid_date")
@@ -47,16 +46,14 @@ pub type Pessoa {
 pub fn handle_request(db: Connection) -> fn(Request) -> Response {
   let api1 = atom.create_from_string("api1@api1")
   let api2 = atom.create_from_string("api2@api2")
-  io.debug(connect(api1))
-  io.debug(connect(api2))
   let node_name = atom.to_string(node())
   case node_name {
     "api1@api1" -> {
-      io.debug("initializing cluster...")
-      io.debug(connect(api2))
+      wisp.log_info("initializing cluster...")
+      connect(api2)
       start_cluster([api1, api2])
     }
-    node -> io.debug("already initialized..." <> node)
+    node -> wisp.log_info("already initialized..." <> node)
   }
   fn(req) {
     case wisp.path_segments(req) {
@@ -84,7 +81,7 @@ fn count_pessoas(db: Connection) -> Response {
     Ok(response) -> {
       let [count] = response.rows
       wisp.ok()
-      |> wisp.set_body(Text(from_string(int.to_string(count))))
+      |> wisp.string_body(int.to_string(count))
     }
     Error(_) -> wisp.internal_server_error()
   }
@@ -131,8 +128,7 @@ fn list_pessoas(req: Request, db: Connection) -> Response {
   case result {
     Ok(content) ->
       wisp.ok()
-      |> set_header("Content-Type", "application/json")
-      |> wisp.set_body(Text(content))
+      |> wisp.json_body(content)
     Error(_) -> wisp.bad_request()
   }
 }
@@ -163,8 +159,7 @@ fn get_pessoa(id: String) -> Response {
           #("stack", json.array(stack, json.string)),
         ]))
       wisp.ok()
-      |> set_header("Content-Type", "application/json")
-      |> wisp.set_body(Text(json_string))
+      |> wisp.json_body(json_string)
     }
   }
 }
@@ -237,6 +232,6 @@ fn create_pessoa(req: Request, db: Connection) -> Response {
     Ok(id) ->
       wisp.created()
       |> set_header("Location", "/pessoas/" <> id)
-    Error(_) -> wisp.response(422)
+    Error(_) -> wisp.unprocessable_entity()
   }
 }

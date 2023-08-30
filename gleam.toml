@@ -11,16 +11,13 @@ repository = { type = "github", user = "thelinuxlich", repo = "gleba" }
 
 [dependencies]
 gleam_stdlib = "~> 0.30"
-wisp = "~> 0.2"
+wisp = "~> 0.4"
 gleam_pgo = "~> 0.5"
 gleam_json = "~> 0.6"
 gleam_http = "~> 3.5"
 gleam_erlang = "~> 0.20"
 mist = "~> 0.13"
-gluon = "~> 0.1"
 ids = "~> 0.8"
-gleam_otp = "~> 0.6"
-birl = "~> 0.14"
 ram = "~> 0.5"
 
 [dev-dependencies]
