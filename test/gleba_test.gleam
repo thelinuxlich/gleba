@@ -11,15 +11,10 @@ import gleam/http
 import gleam/http/request
 import gleam/option.{None, Some}
 import wisp
-import redis
-import gluon
 
 pub fn main() {
   let db = db.init(1)
   let _ = pgo.execute("DELETE FROM pessoas", db, [], dynamic.dynamic)
-  let socket = redis.init()
-  let _ = gluon.send_command(socket, "FLUSHALL")
-  let _ = gluon.close(socket)
   gleeunit.main()
 }
 

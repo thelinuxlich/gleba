@@ -1,9 +1,8 @@
-import wisp.{Request, Response, Text}
+import wisp.{Request, Response}
 import gleam/http.{Get, Post}
 import gleam/pgo.{Connection}
 import gleam/dynamic.{DecodeError, Dynamic}
 import gleam/string.{length}
-import gleam/string_builder.{from_string}
 import gleam/list
 import gleam/json
 import gleam/result.{try}
@@ -21,6 +20,9 @@ fn valid_date(year: Int, month: Int, day: Int) -> Bool
 
 @external(erlang, "erlang", "node")
 fn node() -> Atom
+
+@external(erlang, "erlang", "nodes")
+fn nodes() -> List(Atom)
 
 @external(erlang, "net_kernel", "connect_node")
 fn connect(node: Atom) -> Bool
@@ -44,14 +46,14 @@ pub type Pessoa {
 }
 
 pub fn handle_request(db: Connection) -> fn(Request) -> Response {
-  let api1 = atom.create_from_string("api1@api1")
-  let api2 = atom.create_from_string("api2@api2")
   let node_name = atom.to_string(node())
   case node_name {
     "api1@api1" -> {
       wisp.log_info("initializing cluster...")
-      connect(api2)
-      start_cluster([api1, api2])
+      nodes()
+      |> list.map(fn(n) { connect(n) })
+      start_cluster(nodes())
+      Nil
     }
     node -> wisp.log_info("already initialized..." <> node)
   }
