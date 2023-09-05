@@ -72,8 +72,8 @@ pub fn handle_request(db: Connection) -> fn(Request) -> Response {
   |> io.debug
   let process_name = get_kv_server_name(node())
   let assert Ok(pid) = start_link(process_name)
-  //let assert Ok(_) = process.unregister(process_name)
-  //let assert Ok(_) = process.register(pid, process_name)
+  let assert Ok(_) = process.unregister(process_name)
+  let assert Ok(_) = process.register(pid, process_name)
   fn(req) {
     case wisp.path_segments(req) {
       ["contagem-pessoas"] -> count_pessoas(db)
