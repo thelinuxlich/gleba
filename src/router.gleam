@@ -14,6 +14,18 @@ import gleam/bool.{guard}
 import gleam/int
 import ids/uuid.{generate_v4}
 import gleam/erlang/atom.{Atom}
+import gleam/erlang/process.{Pid}
+import gleam/erlang/node
+import gleam/io
+
+@external(erlang, "kv_server", "start_link")
+fn start_link(name: Atom) -> Result(Pid, String)
+
+@external(erlang, "erlang", "whereis")
+fn whereis(name: Atom) -> Option(Pid)
+
+@external(erlang, "gen_server", "call")
+fn call(kv: Atom, msg: #(Atom, #(String, String))) -> Result(String, String)
 
 @external(erlang, "calendar", "valid_date")
 fn valid_date(year: Int, month: Int, day: Int) -> Bool
@@ -27,15 +39,6 @@ fn nodes() -> List(Atom)
 @external(erlang, "net_kernel", "connect_node")
 fn connect(node: Atom) -> Bool
 
-@external(erlang, "ram", "start_cluster")
-fn start_cluster(nodes: List(Atom)) -> String
-
-@external(erlang, "ram", "get")
-fn ram_get(id: String, default: String) -> String
-
-@external(erlang, "ram", "put")
-fn ram_put(id: String, data: String) -> String
-
 pub type Pessoa {
   Pessoa(
     apelido: String,
@@ -45,18 +48,32 @@ pub type Pessoa {
   )
 }
 
+fn notify_kv(key: String, value: String) {
+  let assert Ok(put) = atom.from_string("put")
+  nodes()
+  |> list.map(fn(n) { call(get_kv_server_name(n), #(put, #(key, value))) })
+}
+
+fn get_from_kv(key: String) {
+  let assert Ok(get) = atom.from_string("get")
+  call(get_kv_server_name(node()), #(get, #(key, "")))
+}
+
+fn get_kv_server_name(node: Atom) {
+  atom.create_from_string(atom.to_string(node) <> "_kv_server")
+}
+
 pub fn handle_request(db: Connection) -> fn(Request) -> Response {
-  let node_name = atom.to_string(node())
-  case node_name {
-    "api1@api1" -> {
-      wisp.log_info("initializing cluster...")
-      nodes()
-      |> list.map(fn(n) { connect(n) })
-      start_cluster(nodes())
-      Nil
-    }
-    node -> wisp.log_info("already initialized..." <> node)
-  }
+  let node_list = [
+    atom.create_from_string("api1@api1"),
+    atom.create_from_string("api2@api2"),
+  ]
+  list.map(node_list, fn(n) { node.connect(n) })
+  |> io.debug
+  let process_name = get_kv_server_name(node())
+  let assert Ok(pid) = start_link(process_name)
+  //let assert Ok(_) = process.unregister(process_name)
+  //let assert Ok(_) = process.register(pid, process_name)
   fn(req) {
     case wisp.path_segments(req) {
       ["contagem-pessoas"] -> count_pessoas(db)
@@ -89,6 +106,16 @@ fn count_pessoas(db: Connection) -> Response {
   }
 }
 
+fn pessoa_return_type() {
+  dynamic.tuple5(
+    dynamic.string,
+    dynamic.string,
+    dynamic.string,
+    dynamic.string,
+    dynamic.string,
+  )
+}
+
 fn list_pessoas(req: Request, db: Connection) -> Response {
   let result = {
     use params <- try(get_query(req))
@@ -96,14 +123,6 @@ fn list_pessoas(req: Request, db: Connection) -> Response {
       params,
       fn(x) { x.0 == "t" && x.1 != "" },
     ))
-    let return_type =
-      dynamic.tuple5(
-        dynamic.string,
-        dynamic.string,
-        dynamic.string,
-        dynamic.string,
-        dynamic.string,
-      )
     let query =
       "SELECT id,apelido,nome,cast(nascimento as text),stack FROM pessoas 
                 WHERE search LIKE '%' || $1 || '%' LIMIT 50"
@@ -111,7 +130,7 @@ fn list_pessoas(req: Request, db: Connection) -> Response {
       query,
       db,
       [pgo.text(string.lowercase(search_term))],
-      return_type,
+      pessoa_return_type(),
     ))
     Ok(json.to_string_builder(json.array(
       response.rows,
@@ -146,19 +165,18 @@ fn dyn_pessoa_decoder() -> fn(Dynamic) -> Result(Pessoa, List(DecodeError)) {
 }
 
 fn get_pessoa(id: String) -> Response {
-  let resp = ram_get(id, "")
+  let resp = get_from_kv(id)
   case resp {
-    "" -> wisp.not_found()
-    data -> {
-      let assert Ok(decoded_data) = json.decode(data, dyn_pessoa_decoder())
-      let Pessoa(apelido, nome, nascimento, Some(stack)) = decoded_data
+    Error(_) -> wisp.not_found()
+    Ok(data) -> {
+      let assert Ok(data) = json.decode(data, dyn_pessoa_decoder())
       let json_string =
         json.to_string_builder(json.object([
           #("id", json.string(id)),
-          #("apelido", json.string(apelido)),
-          #("nome", json.string(nome)),
-          #("nascimento", json.string(nascimento)),
-          #("stack", json.array(stack, json.string)),
+          #("apelido", json.string(data.apelido)),
+          #("nome", json.string(data.nome)),
+          #("nascimento", json.string(data.nascimento)),
+          #("stack", json.array(option.unwrap(data.stack, []), json.string)),
         ]))
       wisp.ok()
       |> wisp.json_body(json_string)
@@ -192,11 +210,11 @@ fn create_pessoa(req: Request, db: Connection) -> Response {
   let result = {
     use data <- try_nil(json.decode_bits(json_data, dyn_pessoa_decoder()))
     use <- guard(!validate_pessoa(data), Error(Nil))
-    let resp = ram_get(data.apelido, "")
+    let resp = get_from_kv(data.apelido)
     case resp {
-      "" -> {
+      Error(_) -> {
         // record doesn't exist, so create
-        let _ = ram_put(data.apelido, "1")
+        let _ = notify_kv(data.apelido, "1")
         let assert Ok(id) = generate_v4()
         let json_data_stringified =
           json.to_string(json.object([
@@ -205,7 +223,7 @@ fn create_pessoa(req: Request, db: Connection) -> Response {
             #("nascimento", json.string(data.nascimento)),
             #("stack", json.array(option.unwrap(data.stack, []), json.string)),
           ]))
-        let _ = ram_put(id, json_data_stringified)
+        let _ = notify_kv(id, json_data_stringified)
         let query =
           "INSERT INTO pessoas (id, apelido,nome,nascimento,stack) VALUES ($1,$2,$3,TO_DATE($4, 'YYYY-MM-DD'),$5)"
         let _ =
