@@ -5,7 +5,7 @@
          terminate/2, code_change/3]).
 
 start_link(Name) ->
-    Return = gen_server:start_link({global, Name}, ?MODULE, [], []),
+    Return = gen_server:start_link({local, Name}, ?MODULE, [], []),
     io:format("start_link: ~p~n", [Return]),
     Return.
 
