@@ -8,7 +8,7 @@ import gleam/json
 import gleam/result.{try}
 import gleam/http/response.{set_header}
 import gleam/http/request.{get_query}
-import gleam/option.{Option, Some}
+import gleam/option.{Option}
 import gleba_utils.{try_nil}
 import gleam/bool.{guard}
 import gleam/int
@@ -19,13 +19,10 @@ import gleam/erlang/node
 import gleam/io
 
 @external(erlang, "kv_server", "start_link")
-fn start_link(name: Atom) -> Result(Pid, String)
-
-@external(erlang, "erlang", "whereis")
-fn whereis(name: Atom) -> Option(Pid)
+fn start_link(name: KvServer) -> Result(Pid, String)
 
 @external(erlang, "gen_server", "call")
-fn call(kv: Atom, msg: #(Atom, #(String, String))) -> Result(String, String)
+fn call(kv: #(KvServer,Atom), msg: #(Atom, #(String, String))) -> Result(String, String)
 
 @external(erlang, "calendar", "valid_date")
 fn valid_date(year: Int, month: Int, day: Int) -> Bool
@@ -36,9 +33,6 @@ fn node() -> Atom
 @external(erlang, "erlang", "nodes")
 fn nodes() -> List(Atom)
 
-@external(erlang, "net_kernel", "connect_node")
-fn connect(node: Atom) -> Bool
-
 pub type Pessoa {
   Pessoa(
     apelido: String,
@@ -48,32 +42,33 @@ pub type Pessoa {
   )
 }
 
+type KvServer {
+  KvServer
+}
+
 fn notify_kv(key: String, value: String) {
   let assert Ok(put) = atom.from_string("put")
-  nodes()
-  |> list.map(fn(n) { call(get_kv_server_name(n), #(put, #(key, value))) })
+  node_list()
+  |> list.map(fn(n) { call(#(KvServer,n), #(put, #(key, value))) })
 }
 
 fn get_from_kv(key: String) {
   let assert Ok(get) = atom.from_string("get")
-  call(get_kv_server_name(node()), #(get, #(key, "")))
+  call(#(KvServer, node()), #(get, #(key, "")))
 }
 
-fn get_kv_server_name(node: Atom) {
-  atom.create_from_string(atom.to_string(node) <> "_kv_server")
-}
-
-pub fn handle_request(db: Connection) -> fn(Request) -> Response {
-  let node_list = [
+fn node_list() {
+  [
     atom.create_from_string("api1@api1"),
     atom.create_from_string("api2@api2"),
   ]
-  list.map(node_list, fn(n) { node.connect(n) })
+}
+
+pub fn handle_request(db: Connection) -> fn(Request) -> Response {
+  list.map(node_list(), fn(n) { node.connect(n) })
   |> io.debug
-  let process_name = get_kv_server_name(node())
-  let assert Ok(pid) = start_link(process_name)
-  let assert Ok(_) = process.unregister(process_name)
-  let assert Ok(_) = process.register(pid, process_name)
+  io.debug(nodes())
+  let assert Ok(_) = start_link(KvServer)
   fn(req) {
     case wisp.path_segments(req) {
       ["contagem-pessoas"] -> count_pessoas(db)
