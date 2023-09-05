@@ -19,14 +19,14 @@ handle_call({Op, {Key, Value}}, _From, State) ->
     case Op of
         get -> 
             try
-                data = maps:get(Key, State),
-                {reply, {ok,data}, State}
+                Data = maps:get(Key, State),
+                {reply, {ok,Data}, State}
             catch
                 _:_ -> {reply, {error, no_key}, State}
             end;
         put -> 
-            data = maps:put(Key, Value, State),
-            {reply, {ok,data}, data}
+            Data = maps:put(Key, Value, State),
+            {reply, {ok,Data}, Data}
     end.
     
 handle_cast(_Msg, State) ->
