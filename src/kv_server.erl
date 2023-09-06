@@ -15,26 +15,33 @@ init([]) ->
     io:format("init: ~p~n", [State]),
     Return.
 
-handle_call({Op, {Key, Value}}, _From, State) ->
+handle_call({Op, {Key}}, _From, State) ->
     case Op of
-        get -> 
-            try
-                Data = maps:get(Key, State),
-                {reply, {ok,Data}, State}
+        get -> try
+                {reply, {ok,maps:get(Key, State)}, State}
             catch
                 _:_ -> {reply, {error, no_key}, State}
             end;
-        put -> 
-            Data = maps:put(Key, Value, State),
-            {reply, {ok,Data}, Data}
-    end.
+        _ -> {reply, {error, unknown_op}, State}
+    end;
+
+handle_call(_Msg, _From, State) ->
+    Return = {reply, {error, unknown_msg}, State},
+    io:format("handle_call: ~p~n", [Return]),
+    Return.
     
 handle_cast(_Msg, State) ->
     Return = {noreply, State},
     io:format("handle_cast: ~p~n", [Return]),
     Return.
 
-handle_info(_Info, State) ->
+handle_info({Op, {Key, Value}}, State) ->
+    case Op of
+        put -> {noreply, State#{Key => Value}};
+        _ -> {noreply, State}
+    end;
+
+handle_info(_Msg, State) ->
     Return = {noreply, State},
     io:format("handle_info: ~p~n", [Return]),
     Return.

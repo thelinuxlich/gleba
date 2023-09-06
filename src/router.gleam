@@ -19,19 +19,16 @@ import gleam/erlang/node
 import gleam/io
 
 @external(erlang, "kv_server", "start_link")
-fn start_link(name: KvServer) -> Result(Pid, String)
+fn start_link(name: Atom) -> Result(Pid, String)
 
 @external(erlang, "gen_server", "call")
-fn call(kv: #(KvServer,Atom), msg: #(Atom, #(String, String))) -> Result(String, String)
+fn call(kv: #(Atom, Atom), msg: #(Atom, #(String))) -> Result(String, String)
 
 @external(erlang, "calendar", "valid_date")
 fn valid_date(year: Int, month: Int, day: Int) -> Bool
 
 @external(erlang, "erlang", "node")
 fn node() -> Atom
-
-@external(erlang, "erlang", "nodes")
-fn nodes() -> List(Atom)
 
 pub type Pessoa {
   Pessoa(
@@ -42,33 +39,29 @@ pub type Pessoa {
   )
 }
 
-type KvServer {
-  KvServer
-}
-
 fn notify_kv(key: String, value: String) {
   let assert Ok(put) = atom.from_string("put")
-  node_list()
-  |> list.map(fn(n) { call(#(KvServer,n), #(put, #(key, value))) })
+  [node.self(), ..node.visible()]
+  |> list.map(fn(n) { node.send(n, kv_server_name(), #(put, #(key, value))) })
 }
 
 fn get_from_kv(key: String) {
   let assert Ok(get) = atom.from_string("get")
-  call(#(KvServer, node()), #(get, #(key, "")))
+  call(#(kv_server_name(), node()), #(get, #(key)))
+}
+
+fn kv_server_name() {
+  atom.create_from_string("kv_server")
 }
 
 fn node_list() {
-  [
-    atom.create_from_string("api1@api1"),
-    atom.create_from_string("api2@api2"),
-  ]
+  [atom.create_from_string("api1@api1"), atom.create_from_string("api2@api2")]
 }
 
 pub fn handle_request(db: Connection) -> fn(Request) -> Response {
   list.map(node_list(), fn(n) { node.connect(n) })
   |> io.debug
-  io.debug(nodes())
-  let assert Ok(_) = start_link(KvServer)
+  let assert Ok(_) = start_link(kv_server_name())
   fn(req) {
     case wisp.path_segments(req) {
       ["contagem-pessoas"] -> count_pessoas(db)
@@ -237,6 +230,7 @@ fn create_pessoa(req: Request, db: Connection) -> Response {
             ],
             dynamic.dynamic,
           )
+
         Ok(id)
       }
       _ -> Error(Nil)
