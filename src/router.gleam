@@ -5,7 +5,6 @@ import gleam/dynamic.{DecodeError, Dynamic}
 import gleam/string.{length}
 import gleam/list
 import gleam/json
-import gleam/result.{try}
 import gleam/http/response.{set_header}
 import gleam/http/request.{get_query}
 import gleam/option.{Option}
@@ -17,6 +16,7 @@ import gleam/erlang/atom.{Atom}
 import gleam/erlang/process.{Pid}
 import gleam/erlang/node
 import gleam/io
+import gleam/result
 
 @external(erlang, "kv_server", "start_link")
 fn start_link(name: Atom) -> Result(Pid, String)
@@ -44,12 +44,14 @@ pub type Pessoa {
 
 fn notify_kv(key: String, value: String) {
   let assert Ok(put) = atom.from_string("put")
+  use <- guard(key == "", [Nil])
   [node.self(), ..node.visible()]
   |> list.map(fn(n) { node.send(n, kv_server_name(), #(put, #(key, value))) })
 }
 
 fn get_from_kv(key: String) {
   let assert Ok(get) = atom.from_string("get")
+  use <- guard(key == "", Error(Nil))
   let data = call(#(kv_server_name(), node()), #(get, #(key, "")))
   case data {
     Ok("") -> Error(Nil)
@@ -252,7 +254,6 @@ fn create_pessoa(req: Request, db: Connection) -> Response {
             ],
             dynamic.dynamic,
           )
-
         Ok(id)
       }
       // record exists, so return error
