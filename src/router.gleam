@@ -1,6 +1,6 @@
 import wisp.{Request, Response}
 import gleam/http.{Get, Post}
-import gleam/pgo.{Connection}
+import gleam/pgo.{Connection, ConnectionUnavailable, PostgresqlError, Returned}
 import gleam/dynamic.{DecodeError, Dynamic}
 import gleam/string.{length}
 import gleam/list
@@ -9,7 +9,7 @@ import gleam/result.{try}
 import gleam/http/response.{set_header}
 import gleam/http/request.{get_query}
 import gleam/option.{Option}
-import gleba_utils.{try_nil}
+import gleba_utils.{try_nil, try_string}
 import gleam/bool.{guard}
 import gleam/int
 import ids/uuid.{generate_v4}
@@ -22,7 +22,10 @@ import gleam/io
 fn start_link(name: Atom) -> Result(Pid, String)
 
 @external(erlang, "gen_server", "call")
-fn call(kv: #(Atom, Atom), msg: #(Atom, #(String))) -> Result(String, String)
+fn call(
+  kv: #(Atom, Atom),
+  msg: #(Atom, #(String, String)),
+) -> Result(String, String)
 
 @external(erlang, "calendar", "valid_date")
 fn valid_date(year: Int, month: Int, day: Int) -> Bool
@@ -47,7 +50,12 @@ fn notify_kv(key: String, value: String) {
 
 fn get_from_kv(key: String) {
   let assert Ok(get) = atom.from_string("get")
-  call(#(kv_server_name(), node()), #(get, #(key)))
+  let data = call(#(kv_server_name(), node()), #(get, #(key, "")))
+  case data {
+    Ok("") -> Error(Nil)
+    Ok(data) -> Ok(data)
+    Error(_) -> Error(Nil)
+  }
 }
 
 fn kv_server_name() {
@@ -106,39 +114,53 @@ fn pessoa_return_type() {
 
 fn list_pessoas(req: Request, db: Connection) -> Response {
   let result = {
-    use params <- try(get_query(req))
-    use #(_, search_term) <- try(list.find(
-      params,
-      fn(x) { x.0 == "t" && x.1 != "" },
-    ))
+    use params <- try_string(get_query(req), "no params")
+    use #(_, search_term) <- try_string(
+      list.find(params, fn(x) { x.0 == "t" && x.1 != "" }),
+      "No element found",
+    )
     let query =
       "SELECT id,apelido,nome,cast(nascimento as text),stack FROM pessoas 
                 WHERE search LIKE '%' || $1 || '%' LIMIT 50"
-    use response <- try_nil(pgo.execute(
-      query,
-      db,
-      [pgo.text(string.lowercase(search_term))],
-      pessoa_return_type(),
-    ))
-    Ok(json.to_string_builder(json.array(
-      response.rows,
-      fn(x) {
-        let assert Ok(stack) = json.decode(x.4, dynamic.list(dynamic.string))
-        json.object([
-          #("id", json.string(x.0)),
-          #("apelido", json.string(x.1)),
-          #("nome", json.string(x.2)),
-          #("nascimento", json.string(x.3)),
-          #("stack", json.array(stack, json.string)),
-        ])
-      },
-    )))
+    let response =
+      pgo.execute(
+        query,
+        db,
+        [pgo.text(string.lowercase(search_term))],
+        pessoa_return_type(),
+      )
+    case response {
+      Ok(Returned(_, rows)) ->
+        Ok(json.to_string_builder(json.array(
+          rows,
+          fn(x) {
+            let assert Ok(stack) =
+              json.decode(x.4, dynamic.list(dynamic.string))
+            json.object([
+              #("id", json.string(x.0)),
+              #("apelido", json.string(x.1)),
+              #("nome", json.string(x.2)),
+              #("nascimento", json.string(x.3)),
+              #("stack", json.array(stack, json.string)),
+            ])
+          },
+        )))
+      Error(PostgresqlError(_, _, message)) -> Error(message)
+      Error(ConnectionUnavailable) -> Error("Connection unavailable")
+      Error(_) -> Error("Unknown error")
+    }
   }
   case result {
     Ok(content) ->
       wisp.ok()
       |> wisp.json_body(content)
-    Error(_) -> wisp.bad_request()
+    Error(reason) -> {
+      case reason {
+        "No element found" -> ""
+        _ -> io.debug(reason)
+      }
+      wisp.bad_request()
+    }
   }
 }
 
@@ -233,10 +255,10 @@ fn create_pessoa(req: Request, db: Connection) -> Response {
 
         Ok(id)
       }
+      // record exists, so return error
       _ -> Error(Nil)
     }
   }
-  // record exists, so return error
   case result {
     Ok(id) ->
       wisp.created()

@@ -13,6 +13,8 @@ pub fn init(pool_size: Int) {
   pgo.connect(
     pgo.Config(
       ..pgo.default_config(),
+      queue_target: 10,
+      queue_interval: 500,
       host: host,
       port: port,
       database: database,

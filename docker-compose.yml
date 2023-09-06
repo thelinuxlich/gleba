@@ -7,7 +7,7 @@ services:
     depends_on:
       - db
     environment:
-      POSTGRES_POOL: 200
+      POSTGRES_POOL: 360
       POSTGRES_PASSWORD: test
       POSTGRES_USER: postgres
       POSTGRES_DB: postgres
@@ -18,7 +18,7 @@ services:
       resources:
         limits:
           cpus: '0.4'
-          memory: 0.7GB
+          memory: 0.4GB
   api2:
     image: thelinuxlich/gleba:latest
     restart: always
@@ -26,7 +26,7 @@ services:
     depends_on:
       - db
     environment:
-      POSTGRES_POOL: 200
+      POSTGRES_POOL: 360
       POSTGRES_PASSWORD: test
       POSTGRES_USER: postgres
       POSTGRES_DB: postgres
@@ -37,7 +37,7 @@ services:
       resources:
         limits:
           cpus: '0.4'
-          memory: 0.7GB
+          memory: 0.4GB
   nginx:
     image: nginx:latest
     volumes:
@@ -50,8 +50,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.2'
-          memory: 0.2GB
+          cpus: '0.1'
+          memory: 0.1GB
   db:
     image: postgres:15
     command: postgres -c config_file=/etc/postgresql/postgresql.conf
@@ -68,5 +68,5 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 1.3GB
+          cpus: '0.6'
+          memory: 2GB

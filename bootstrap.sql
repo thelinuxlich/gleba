@@ -9,5 +9,5 @@ CREATE UNLOGGED TABLE "pessoas"(
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA pg_catalog;
 
-CREATE INDEX idx_pessoas_apelido_trg ON "pessoas" USING gist("search" gist_trgm_ops);
+CREATE INDEX CONCURRENTLY idx_pessoas_apelido_trg ON "pessoas" USING gist("search" gist_trgm_ops);
 
