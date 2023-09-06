@@ -14,7 +14,7 @@ import gleam/int
 import ids/uuid.{generate_v4}
 import gleam/erlang/atom.{Atom}
 import gleam/erlang/process.{Pid}
-import gleam/erlang/node
+import gleam/erlang/node.{Node}
 import gleam/io
 import gleam/result
 
@@ -23,15 +23,12 @@ fn start_link(name: Atom) -> Result(Pid, String)
 
 @external(erlang, "gen_server", "call")
 fn call(
-  kv: #(Atom, Atom),
+  kv: #(Atom, Node),
   msg: #(Atom, #(String, String)),
 ) -> Result(String, String)
 
 @external(erlang, "calendar", "valid_date")
 fn valid_date(year: Int, month: Int, day: Int) -> Bool
-
-@external(erlang, "erlang", "node")
-fn node() -> Atom
 
 pub type Pessoa {
   Pessoa(
@@ -52,7 +49,7 @@ fn notify_kv(key: String, value: String) {
 fn get_from_kv(key: String) {
   let assert Ok(get) = atom.from_string("get")
   use <- guard(key == "", Error(Nil))
-  let data = call(#(kv_server_name(), node()), #(get, #(key, "")))
+  let data = call(#(kv_server_name(), node.self()), #(get, #(key, "")))
   case data {
     Ok("") -> Error(Nil)
     Ok(data) -> Ok(data)
@@ -136,13 +133,14 @@ fn list_pessoas(req: Request, db: Connection) -> Response {
         Ok(json.to_string_builder(json.array(
           rows,
           fn(x) {
+            let #(id, apelido, nome, nascimento, stack) = x
             let assert Ok(stack) =
-              json.decode(x.4, dynamic.list(dynamic.string))
+              json.decode(stack, dynamic.list(dynamic.string))
             json.object([
-              #("id", json.string(x.0)),
-              #("apelido", json.string(x.1)),
-              #("nome", json.string(x.2)),
-              #("nascimento", json.string(x.3)),
+              #("id", json.string(id)),
+              #("apelido", json.string(apelido)),
+              #("nome", json.string(nome)),
+              #("nascimento", json.string(nascimento)),
               #("stack", json.array(stack, json.string)),
             ])
           },
